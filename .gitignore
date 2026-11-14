@@ -218,3 +218,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local and generated project data/artifacts; keep directory placeholders tracked.
+/data/raw/**
+!/data/raw/**/
+!/data/raw/**/.gitkeep
+/data/processed/**
+!/data/processed/**/
+!/data/processed/**/.gitkeep
+/data/overlap/**
+!/data/overlap/**/
+!/data/overlap/**/.gitkeep
+/data/environmental/**
+!/data/environmental/**/
+!/data/environmental/**/.gitkeep
+/models/**
+!/models/**/
+!/models/**/.gitkeep
+/outputs/**
+!/outputs/**/
+!/outputs/**/.gitkeep
+/results/**
+!/results/**/
+!/results/**/.gitkeep
