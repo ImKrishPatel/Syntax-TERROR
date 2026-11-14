@@ -4,8 +4,9 @@
 
 This module will provide the foundation for estimating the sub-pixel
 distribution of active-fire observations at VIIRS-like spatial resolution from
-coarser MODIS observations. The current module includes local FIRMS CSV
-ingestion and cleaning utilities. It does not implement or train a model.
+coarser MODIS observations. The current module includes local FIRMS ingestion,
+overlap matching, target-grid construction, environmental raster alignment,
+and training-sample packaging. It does not implement or train a model.
 
 ## Scientific problem
 
@@ -33,8 +34,9 @@ No training examples are included in this repository setup.
 
 ## Environmental features
 
-Environmental spatial context may include DEM/elevation and land cover.
-Additional feature choices and processing methods remain to be determined.
+Environmental spatial context may include elevation, slope, aspect, and land
+cover. The raster feature interface is described below; no environmental
+provider or data source is selected.
 
 ## Planned model
 
@@ -168,22 +170,23 @@ north.
   `time_difference_minutes`, relative coordinates, and a `valid` flag. This
   retains multiple VIIRS positions for later target-grid construction.
 
-  Conceptually:
+Conceptually:
 
-  ```text
-  MODIS observation
-    -> find same-date VIIRS observations within the time tolerance
-    -> keep those within the WGS84 spatial radius
-    -> preserve all valid candidates and their VIIRS coordinates
-    -> select the nearest candidate for the one-to-one pair table
-    -> retain local east/north offsets for a later 375 m target grid
-  ```
+```text
+MODIS observation
+  -> find same-date VIIRS observations within the time tolerance
+  -> keep those within the WGS84 spatial radius
+  -> preserve all valid candidates and their VIIRS coordinates
+  -> select the nearest candidate for the one-to-one pair table
+  -> retain local east/north offsets for a later 375 m target grid
+```
 
 The baseline pair table selects the nearest valid VIIRS observation per MODIS
 record. Ties are resolved by time difference and then stable VIIRS ID. The
 candidate count and candidate table preserve the additional observations; no
 VIIRS detections are reduced to a binary presence value. No heuristic
 excellent/good categories are assigned.
+
 `valid` means only that a pair meets the configured date, time, and distance
 criteria; it is not a scientifically validated match.
 
@@ -201,5 +204,77 @@ an observation-to-observation baseline, not a reconstruction of sensor pixel
 footprints or proof of a fire-event relationship. Preserve timestamps for
 future chronological splitting; do not randomly split nearby records from the
 same event across training and validation. This milestone only prepares
-observed overlap data for later work: it does not create 375 m rasters,
-environmental features, model estimates, training, or validation results.
+observed overlap data for later work. The target-grid and environmental
+interfaces described below prepare sample representations only; no model
+training, validation results, or historical synthesis are implemented.
+
+## 375 m target grids and training samples
+
+`LocalTargetGrid` creates a square metric grid centered at the MODIS
+observation. Defaults in `spatial_ml/config.py` are 375 m resolution and
+3 × 3 cells, covering 1,125 m × 1,125 m. Resolution, dimensions, and projection
+strategy can be configured per grid. The default local azimuthal-equidistant
+(AEQD) projection is centered at each MODIS location. A caller may instead
+provide a projected custom CRS with meter units.
+
+Rows increase north-to-south and columns west-to-east. The MODIS origin is at
+the center of the default odd-sized grid. Geographic coordinates are projected
+to local meters before cell assignment; the grid transform, CRS, bounds, and
+index convention are preserved in metadata. The east/north edge convention is
+left/top inclusive and right/bottom exclusive.
+
+`build_viirs_target_grid` accepts one MODIS observation and its associated
+VIIRS candidate rows. It reuses the overlap pipeline's `delta_x_m` and
+`delta_y_m` for the default AEQD grid; with a custom CRS it projects the VIIRS
+coordinates into that grid. Each VIIRS point is assigned a stable row/column.
+Out-of-grid points remain in the mapping table with `in_grid=False` instead of
+being silently dropped.
+
+The primary target is a 2D binary observed-point occupancy grid: 0 means no
+VIIRS point was mapped into that cell, and 1 means one or more points were
+mapped there. Multiple VIIRS points in a cell are aggregated with logical OR;
+their individual IDs, coordinates, FRP, and confidence remain in the target
+observation table. An empty target means no in-grid VIIRS point evidence in the
+provided candidate set, not proof that no fire occurred. The grid models the
+locations of point detections; it is not the physical VIIRS pixel footprint or
+a reconstructed satellite image.
+
+## Environmental raster interface
+
+`RasterFeatureSource` accepts caller-supplied local raster paths, feature
+names, bands, and resampling methods. `extract_environmental_features` uses
+rasterio reprojection/resampling to align each source to the same local grid
+CRS, transform, width, and height. Continuous layers can use bilinear
+resampling; categorical land cover should use nearest-neighbor resampling.
+Nothing is downloaded automatically and no provider is assumed.
+
+Missing raster pixels remain NaN by default (or can be assigned a caller
+chosen fill value). The interface performs no global imputation or
+normalization, so later preprocessing can be fit using training data only.
+When an elevation feature is explicitly selected, slope is derived in degrees
+from local-meter gradients. Downhill aspect is represented by `aspect_sin` and
+`aspect_cos` to avoid the 0°/360° discontinuity; flat-cell aspect is missing.
+Slope/aspect quality depends on the source DEM resolution and alignment.
+
+## ML sample representation and leakage safeguards
+
+`build_training_sample` combines:
+
+- MODIS FRP/confidence features and observation metadata;
+- an aligned H × W × C environmental feature array (zero channels when no
+  environmental source is supplied);
+- a 2D binary VIIRS target grid and the per-observation target mapping table.
+
+The sample retains MODIS ID, datetime, coordinates, source sensor labels,
+target-grid geometry, and VIIRS IDs. `TrainingSample.save/load` serializes
+arrays and JSON metadata to compressed NPZ without pickle. Timestamps remain
+available for later chronological or event-based splitting. Do not randomly
+split neighboring samples across train and validation, or normalize using
+validation/test data.
+
+Tests create tiny deterministic rasters in temporary directories, using
+synthetic values, CRS, and geotransforms; no raster fixture or NASA data is
+downloaded or committed. Grid size, resolution, projection, matching radius,
+and time tolerance are configurable starting assumptions, not scientifically
+validated thresholds. Any later 375 m historical product must be labeled as a
+MODEL ESTIMATE, never as historical observed VIIRS.
