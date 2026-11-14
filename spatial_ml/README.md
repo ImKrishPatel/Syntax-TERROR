@@ -4,8 +4,8 @@
 
 This module will provide the foundation for estimating the sub-pixel
 distribution of active-fire observations at VIIRS-like spatial resolution from
-coarser MODIS observations. This milestone establishes configuration, package
-structure, and directories only; it does not implement or train a model.
+coarser MODIS observations. The current module includes local FIRMS CSV
+ingestion and cleaning utilities. It does not implement or train a model.
 
 ## Scientific problem
 
@@ -76,3 +76,48 @@ MODIS and VIIRS source observations must remain distinguishable from derived
 products. In particular, the estimated 375 m values for 2000–2011 are MODEL
 ESTIMATES generated from MODIS and spatial context. They must not be presented
 or labeled as actual VIIRS observations.
+
+## FIRMS ingestion and cleaning
+
+The ingestion layer accepts local CSV files only; it does not download NASA
+data.
+
+- Expected MODIS input: a FIRMS CSV with latitude/longitude, acquisition date
+  and time, and available satellite, instrument, confidence, FRP, and day/night
+  columns.
+- Expected VIIRS input: the equivalent local VIIRS FIRMS CSV. Common column
+  variants such as `lat`/`lon`, `acq_date`/`acq_time`, and `day_night` are
+  normalized.
+- `load_modis(path)` and `load_viirs(path)` normalize schema and explicitly set
+  the sensor label. Loading does not discard rows.
+- The normalized schema includes `latitude`, `longitude`, `date`, `time`,
+  `datetime`, `sensor`, `satellite`, `instrument`, `confidence`, `frp`, and
+  `daynight`. Unrecognized source columns are retained.
+- Date/time values are parsed into a date, an HHMM time string, and a datetime.
+  Midnight and leading-zero acquisition times are supported. Missing or
+  malformed timestamps remain missing during normalization and are excluded
+  by cleaning with an informational log message.
+- Cleaning removes rows with missing/out-of-range coordinates and rows with
+  missing or malformed datetimes. Duplicate observations are identified by
+  sensor, coordinates, datetime, satellite, and instrument; only later exact
+  matches on those identifying fields are removed.
+- Missing, non-numeric, non-finite, or negative FRP is represented as missing;
+  those records are retained. The source confidence value is preserved; values
+  outside the supported numeric range or known categorical labels are flagged
+  in `confidence_valid`, not filtered. No confidence threshold is applied.
+- `quality_control_summary(raw, cleaned)` returns counts, retained percentage,
+  coordinate/date ranges, missing and invalid FRP/confidence counts, duplicate
+  count, sensor, satellites, and day/night counts.
+- `temporal_range_summary(modis, viirs)` reports observed earliest/latest
+  datetimes and whether the supplied ranges overlap. The result is based on
+  supplied records, not assumed mission date ranges.
+
+`tests/fixtures/` contains tiny, clearly labeled synthetic CSVs for offline
+tests; they are not NASA observations. Run the demonstration with:
+
+```bash
+python -m spatial_ml.data.check_sample_ingestion
+```
+
+The ingestion layer standardizes observed MODIS and VIIRS FIRMS records. It
+does not perform spatial harmonization or generate synthetic VIIRS observations.
