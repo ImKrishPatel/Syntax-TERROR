@@ -104,7 +104,9 @@ def cell_polygon(lat, lon, res):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", default="public/data/hotspots.csv", help="grid CSV (DATA_FORMAT.md)")
-    ap.add_argument("--firms", nargs="*", help="raw FIRMS archive CSVs (adds day/night + daily features)")
+    ap.add_argument("--firms", nargs="*", help="raw FIRMS archive CSVs or zips (adds day/night + daily features)")
+    ap.add_argument("--sensor", choices=["MODIS", "VIIRS"], help="keep one instrument from the FIRMS files")
+    ap.add_argument("--cache", help="save/load the cell-day table here (.parquet or .pkl) to skip re-reading FIRMS")
     ap.add_argument("--res", type=float, default=0.5, help="grid size in degrees")
     ap.add_argument("--method", choices=["auto", "kmeans", "hdbscan"], default="auto")
     ap.add_argument("--k", type=int, nargs="*", default=list(range(3, 9)), help="k values to try")
@@ -119,8 +121,14 @@ def main(argv=None):
 
     # 1. ingest
     pts = None
-    if a.firms:
-        pts = ingest.load_firms_raw(a.firms, a.res)
+    if a.cache and Path(a.cache).exists():
+        import pandas as pd
+        pts = pd.read_pickle(a.cache)
+        monthly = ingest.points_to_monthly(pts)
+    elif a.firms:
+        pts = ingest.load_firms_raw(a.firms, a.res, sensor=a.sensor)
+        if a.cache:
+            pts.to_pickle(a.cache)
         monthly = ingest.points_to_monthly(pts)
     else:
         monthly = ingest.load_grid_csv(a.input)
@@ -162,10 +170,12 @@ def main(argv=None):
     by_id = {r["regime_id"]: r for r in regimes}
 
     # 9. outputs
+    has_sensor_change = bool(monthly["est_count"].sum() > 0)  # false for a MODIS-only record
     features_out, n_shift = [], 0
     for i, row in feats.iterrows():
         hist = per_cell[row["cell_id"]]
         shifted, frm, to, crosses = detect_shift(wins, hist)
+        crosses = crosses and has_sensor_change
         n_shift += shifted
         r = by_id[int(rid[i])]
         props = {
@@ -194,7 +204,8 @@ def main(argv=None):
         r.pop("label")
         r["n_shifted_cells"] = int(sum(f["properties"]["shifted"] and f["properties"]["regime_id"] == r["regime_id"]
                                        for f in features_out))
-    summary = {"windows": [list(w) for w in wins], "sensor_change_year": SENSOR_CHANGE_YEAR,
+    summary = {"windows": [list(w) for w in wins],
+               "sensor_change_year": SENSOR_CHANGE_YEAR if has_sensor_change else None,
                "grid_res_deg": a.res, "n_cells": len(feats), "n_shifted_cells": int(n_shift),
                "regimes": regimes, "validation": report}
     (out / "regime_summary.json").write_text(json.dumps(summary, indent=1, default=float))

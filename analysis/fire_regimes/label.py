@@ -54,7 +54,9 @@ def _season(peak_month, lat, curve=None):
 def _archetype(z, r):
     g = lambda k: z.get(k, 0.0)
     night = z.get("night_share")
-    if r["season_concentration"] < 0.35 and g("fire_month_share") > 0.3:
+    # flat = 80% of activity needs 8+ months. (Low circular concentration alone
+    # isn't enough: two opposite peaks, e.g. spring + autumn crop burns, cancel out.)
+    if r["season_length_months"] >= 8 and g("fire_month_share") > 0.3:
         return "year_round"
     if g("log_frp_p95") > 0.6 and (g("longest_run_months") > 0.2 or g("frp_skew") > 0.4):
         return "high_intensity"
@@ -100,7 +102,7 @@ def _summary(r, season):
     peak = calendar.month_name[int(r["peak_month"])]
     hpy = r["hotspots_per_year"]
     parts = [f"A typical cell here sees about {hpy:,.0f} hotspots a year"]
-    if r["season_concentration"] < 0.35:
+    if r["season_length_months"] >= 8:
         parts.append("spread across most of the year")
     else:
         parts.append(f"mostly in {season} (peak {peak}, about {r['season_length_months']:.0f} months long)")

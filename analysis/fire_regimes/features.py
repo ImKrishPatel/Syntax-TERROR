@@ -171,19 +171,20 @@ def monthly_features(monthly, years=None, start=None, end=None):
     return f
 
 
-def daily_features(pts, years=None):
-    """Day/night ratio and burn-day statistics from raw FIRMS points."""
+def daily_features(day, years=None):
+    """Day/night ratio and burn-day statistics from the cell-day table."""
     if years is not None:
-        pts = pts[pts["date"].dt.year.isin(years)]
-    n_days = max(1, len(pd.date_range(pts["date"].min(), pts["date"].max())))
-    det = pts.groupby("cell_id").agg(night_share=("is_night", "mean"))
-    days = pts[["cell_id", "date"]].drop_duplicates().sort_values(["cell_id", "date"])
+        day = day[day["date"].dt.year.isin(list(years))]
+    n_days = max(1, (day["date"].max() - day["date"].min()).days + 1)
+    g = day.groupby("cell_id")
+    det = (g["night"].sum() / g["count"].sum()).rename("night_share").to_frame()
+    days = day[["cell_id", "date"]].sort_values(["cell_id", "date"])
     gap = days.groupby("cell_id")["date"].diff().dt.days
     days["new_run"] = gap.isna() | (gap > 1)
     days["new_episode"] = gap.isna() | (gap > 7)   # re-burn = new fire after a week off
     days["run"] = days.groupby("cell_id")["new_run"].cumsum()
     run_len = days.groupby(["cell_id", "run"]).size().groupby("cell_id").mean()
-    n_years = max(1, pts["date"].dt.year.nunique())
+    n_years = max(1, day["date"].dt.year.nunique())
     out = pd.DataFrame({
         "fire_day_share": days.groupby("cell_id").size() / n_days,
         "mean_run_days": run_len,
