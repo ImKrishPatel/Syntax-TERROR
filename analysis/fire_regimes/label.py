@@ -35,28 +35,53 @@ def _z(df, cols):
 
 
 def _season(peak_month, lat, curve=None):
-    """Season word for the peak; "spring and autumn" style when there are two
-    clear peaks at least 3 months apart (e.g. two crop-residue burns)."""
-    name = lambda m: FLIP[SEASONS_NH[m]] if lat < 0 else SEASONS_NH[m]
-    if curve is not None:
-        c = np.asarray(curve)
-        peaks = [m for m in range(12) if c[m] >= 0.5 * c.max()
-                 and c[m] >= c[(m - 1) % 12] and c[m] >= c[(m + 1) % 12]]
-        peaks = sorted(peaks, key=lambda m: -c[m])
-        if len(peaks) >= 2:
-            a, b = peaks[0], next((m for m in peaks[1:] if min(abs(m - peaks[0]), 12 - abs(m - peaks[0])) >= 3), None)
-            if b is not None and name(a + 1) != name(b + 1):
-                first, second = sorted([a, b])
-                return f"{name(first + 1)} and {name(second + 1)}"
-    return name(peak_month)
+    """Month-based season text, e.g. "Jul-Sep" or "Mar-Apr & Oct-Nov".
+
+    Month names instead of "summer"/"winter": a regime can span both
+    hemispheres, where the same month is a different season."""
+    ab = calendar.month_abbr
+    if curve is None:
+        return ab[peak_month]
+    c = np.asarray(curve, float)
+
+    thr = 0.5 * c.max()  # one threshold for every peak, so spans can't swallow each other
+
+    def span(m):
+        lo = hi = m
+        while c[(lo - 1) % 12] >= thr and (hi - lo) < 11:
+            lo -= 1
+        while c[(hi + 1) % 12] >= thr and (hi - lo) < 11:
+            hi += 1
+        return lo, hi
+
+    def text(lo, hi):
+        if hi - lo >= 10:
+            return "most of the year"
+        return ab[lo % 12 + 1] if lo == hi else f"{ab[lo % 12 + 1]}-{ab[hi % 12 + 1]}"
+
+    m1 = int(c.argmax())
+    lo, hi = span(m1)
+    inside = {k % 12 for k in range(lo, hi + 1)}
+    rest = [m for m in range(12) if m not in inside and c[m] >= thr
+            and c[m] >= c[(m - 1) % 12] and c[m] >= c[(m + 1) % 12]]
+    if rest:
+        lo2, hi2 = span(max(rest, key=lambda m: c[m]))
+        a1, a2 = sorted([(lo % 12, text(lo, hi)), (lo2 % 12, text(lo2, hi2))])
+        return f"{a1[1]} & {a2[1]}"
+    return text(lo, hi)
 
 
 def _archetype(z, r):
     g = lambda k: z.get(k, 0.0)
     night = z.get("night_share")
-    if r["season_concentration"] < 0.35 and g("fire_month_share") > 0.3:
+    # flat = 80% of activity needs 8+ months. (Low circular concentration alone
+    # isn't enough: two opposite peaks, e.g. spring + autumn crop burns, cancel out.)
+    if r["season_length_months"] >= 8 and g("fire_month_share") > 0.3:
         return "year_round"
     if g("log_frp_p95") > 0.6 and (g("longest_run_months") > 0.2 or g("frp_skew") > 0.4):
+        return "high_intensity"
+    # big fires that keep burning through the night (boreal-style crown fires)
+    if g("log_frp_mean") > 0.6 and night is not None and night > 0.5:
         return "high_intensity"
     ag_night = night is None or night < -0.3
     if g("log_frp_mean") < -0.4 and ag_night and (g("runs_per_year") > 0.2 or g("longest_run_months") < -0.2):
@@ -86,13 +111,14 @@ CONTRASTS = [("log_frp_p95", "higher-intensity", "lower-intensity"),
 def _name(arch, z, r, season, q):
     freq = _freq_word(r["hotspots_per_year"], q)
     peak = calendar.month_abbr[int(r["peak_month"])]
+    when = f"peak {peak}" if "&" not in season else f"peaks {season}"
     return {
         "year_round": f"Year-round burning ({freq.lower()})",
-        "high_intensity": f"{freq} high-intensity {season} wildfires",
-        "agricultural": f"{freq} low-intensity {season} burning (agricultural-style)",
-        "sporadic": f"Rare, sporadic fires (peak {peak})",
-        "seasonal_wildfire": f"{freq} {season} wildfires (peak {peak})",
-        "mixed": f"{freq} mixed fire activity",
+        "high_intensity": f"{freq} high-intensity wildfires ({when})",
+        "agricultural": f"{freq} low-intensity burning, agricultural-style ({when})",
+        "sporadic": f"Rare, sporadic fires ({when})",
+        "seasonal_wildfire": f"{freq} seasonal fires ({when})",
+        "mixed": f"{freq} mixed fire activity ({when})",
     }[arch]
 
 
@@ -100,10 +126,10 @@ def _summary(r, season):
     peak = calendar.month_name[int(r["peak_month"])]
     hpy = r["hotspots_per_year"]
     parts = [f"A typical cell here sees about {hpy:,.0f} hotspots a year"]
-    if r["season_concentration"] < 0.35:
+    if r["season_length_months"] >= 8:
         parts.append("spread across most of the year")
     else:
-        parts.append(f"mostly in {season} (peak {peak}, about {r['season_length_months']:.0f} months long)")
+        parts.append(f"mostly {season} (peak {peak})")
     s = ", ".join(parts) + ". "
     s += f"Fires average {r['frp_mean']:.0f} MW per hotspot"
     s += (" and some get very large" if r["frp_skew"] > 0.8 else "") + ". "
@@ -156,8 +182,8 @@ def _disambiguate(regimes):
     """Same name twice -> prefix each with what sets it apart from the others."""
     from collections import defaultdict
     groups = defaultdict(list)
-    for r in regimes:
-        groups[r["regime_name"]].append(r)
+    for r in regimes:  # group by the name without its "(peak ...)" part
+        groups[r["regime_name"].split(" (")[0]].append(r)
     for name, rs in groups.items():
         if len(rs) < 2:
             continue
@@ -174,7 +200,12 @@ def _disambiguate(regimes):
                     best = (abs(d), word)
             word = best[1] if best else f"group {r['regime_id']}"
             taken.add(word)
-            r["regime_name"] = f"{word.capitalize()} {name[0].lower()}{name[1:]}"
+            full = r["regime_name"]
+            if word in ("busier", "quieter") and full.startswith("Frequent"):
+                # "Busier frequent ..." reads badly: say "Very frequent" / keep "Frequent"
+                r["regime_name"] = "Very f" + full[1:] if word == "busier" else full
+            else:
+                r["regime_name"] = f"{word.capitalize()} {full[0].lower()}{full[1:]}"
 
 
 # Step 6c: compare against regions whose regime is well known.
