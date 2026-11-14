@@ -5,6 +5,7 @@ import './leaflet.js'
 import { useSelection } from '../state/selection.js'
 import DrawControl from './DrawControl.jsx'
 import HeatLayer, { useHeatCells, HEAT_COLORS } from './HeatLayer.jsx'
+import RegimeLayer, { useRegimes } from './RegimeLayer.jsx'
 
 const AREA_STYLE = { color: '#ff7a1a', weight: 2, fill: false }
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
@@ -33,6 +34,8 @@ export default function MapView() {
   const [showHeat, setShowHeat] = useState(true)
   const [metric, setMetric] = useState('hotspot_count')
   const heat = useHeatCells(metric)
+  const [showRegimes, setShowRegimes] = useState(false)
+  const { geojson, regimes } = useRegimes()
   const unit = METRICS[metric].unit
 
   return (
@@ -45,6 +48,8 @@ export default function MapView() {
         />
 
         {showHeat && <HeatLayer cells={heat.cells} max={heat.max} cellSize={heat.cellSize} unit={unit} />}
+
+        {showRegimes && <RegimeLayer geojson={geojson} regimes={regimes} />}
 
         {/* place names drawn on top of the data */}
         <TileLayer url={`${ESRI}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`} maxZoom={16} />
@@ -88,6 +93,21 @@ export default function MapView() {
               </div>
             </div>
           </>
+        )}
+
+        <label className="toggle">
+          <input type="checkbox" checked={showRegimes} onChange={(e) => setShowRegimes(e.target.checked)} />
+          Fire regimes
+        </label>
+        {showRegimes && (
+          <ul className="regime-legend">
+            {regimes.map((r) => (
+              <li key={r.id}>
+                <span style={{ background: r.color }} />
+                {r.name}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

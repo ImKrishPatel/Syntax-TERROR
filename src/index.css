@@ -101,3 +101,13 @@ select {
 .legend-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; }
 .legend-bar span { flex: 1; }
 .legend-ends { display: flex; justify-content: space-between; gap: 16px; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.layer-panel { max-width: 240px; }
+.regime-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.regime-legend li { display: flex; align-items: center; gap: 6px; }
+.regime-legend span { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+/* ---- verdict card ---- */
+.verdict { border-left: 4px solid var(--muted); }
+.verdict-raised { border-left-color: #feb078; }
+.verdict-high { border-left-color: #f1605d; }
+.verdict-text { font-size: 17px; line-height: 1.4; margin: 0; font-weight: 600; }
