@@ -121,3 +121,85 @@ python -m spatial_ml.data.check_sample_ingestion
 
 The ingestion layer standardizes observed MODIS and VIIRS FIRMS records. It
 does not perform spatial harmonization or generate synthetic VIIRS observations.
+
+## MODIS–VIIRS overlap matching
+
+The overlap dataset is built from normalized, cleaned observed MODIS and VIIRS
+records. The period when both sensors provide observations supplies examples
+for comparing their different spatial resolutions. The overlap period is
+derived from the supplied datetime ranges; the pipeline does not assume
+mission start/end years or claim that a particular calendar period is present.
+`get_overlap_period(modis, viirs)` returns the inclusive datetime intersection
+and raises a clear error if there is no intersection.
+
+Matching defaults are configured in `spatial_ml/config.py`:
+
+- Temporal tolerance: `DEFAULT_TIME_TOLERANCE_MINUTES` (30 minutes).
+- Spatial radius: `SPATIAL_MATCH_RADIUS_M` (1,000 m, a starting heuristic).
+
+Candidates must be from the same acquisition date and within the absolute
+timestamp tolerance. This avoids treating separate days as equivalent while
+allowing for small sensor acquisition-time differences. Matching evaluates
+complete UTC calendar dates touched by the observed timestamp-range
+intersection, so near-simultaneous records just outside either dataset's exact
+first/last timestamp are not discarded before applying the tolerance. The
+one-kilometre radius is an observation-to-observation proximity threshold near
+the nominal MODIS footprint scale; it is not a physical MODIS pixel boundary
+and has not been scientifically validated.
+
+The spatial search uses a 3D unit-sphere `cKDTree` to efficiently find
+geographic neighbors without assuming one projection is valid globally.
+Candidates are then checked with WGS84 geodesic distances in meters. Relative
+VIIRS positions are represented in a MODIS-centered local azimuthal-equidistant
+coordinate frame: `delta_x_m` is positive east and `delta_y_m` is positive
+north.
+
+`generate_overlap_dataset(modis, viirs)` returns two tables:
+
+- **Pair table:** one row per MODIS observation on common UTC calendar dates
+  touched by the observed overlap interval, including unmatched MODIS
+  observations. It preserves the requested fields from both sensors,
+  selected-match distance/time difference, candidate count, relative
+  coordinates, and `match_valid` plus the binary `match_quality` (`valid` or
+  `invalid`).
+- **Candidate table:** one row per MODIS/VIIRS candidate satisfying the
+  same-day, time-tolerance, and spatial-radius rules. It preserves both
+  observations' fields, IDs, `distance_m`, absolute
+  `time_difference_minutes`, relative coordinates, and a `valid` flag. This
+  retains multiple VIIRS positions for later target-grid construction.
+
+  Conceptually:
+
+  ```text
+  MODIS observation
+    -> find same-date VIIRS observations within the time tolerance
+    -> keep those within the WGS84 spatial radius
+    -> preserve all valid candidates and their VIIRS coordinates
+    -> select the nearest candidate for the one-to-one pair table
+    -> retain local east/north offsets for a later 375 m target grid
+  ```
+
+The baseline pair table selects the nearest valid VIIRS observation per MODIS
+record. Ties are resolved by time difference and then stable VIIRS ID. The
+candidate count and candidate table preserve the additional observations; no
+VIIRS detections are reduced to a binary presence value. No heuristic
+excellent/good categories are assigned.
+`valid` means only that a pair meets the configured date, time, and distance
+criteria; it is not a scientifically validated match.
+
+The CSV outputs `modis_viirs_pairs.csv` and `modis_viirs_candidates.csv` are
+written only when `save_overlap_tables` is called explicitly. Generated tables
+are kept under the ignored `data/overlap/` directory by default. To run the
+offline synthetic example:
+
+```bash
+python -m spatial_ml.pipeline.check_overlap_matching
+```
+
+The example fixtures are synthetic and are not NASA observations. Matching is
+an observation-to-observation baseline, not a reconstruction of sensor pixel
+footprints or proof of a fire-event relationship. Preserve timestamps for
+future chronological splitting; do not randomly split nearby records from the
+same event across training and validation. This milestone only prepares
+observed overlap data for later work: it does not create 375 m rasters,
+environmental features, model estimates, training, or validation results.
