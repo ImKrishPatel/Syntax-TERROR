@@ -1,0 +1,25 @@
+{
+ "is_demo": true,
+ "overlap_period": "2012 to 2024",
+ "note": "Model estimates compared with real VIIRS in years where both sensors were flying.",
+ "metrics": [
+  {
+   "label": "Monthly hotspot counts",
+   "value": "0.93",
+   "unit": "R²",
+   "detail": "estimated vs real VIIRS, per cell"
+  },
+  {
+   "label": "Fire energy (FRP)",
+   "value": "11",
+   "unit": "% error",
+   "detail": "median error after calibration"
+  },
+  {
+   "label": "Fire or no fire",
+   "value": "0.88",
+   "unit": "F1",
+   "detail": "per 375 m pixel, held-out year"
+  }
+ ]
+}

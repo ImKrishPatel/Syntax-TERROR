@@ -1,0 +1,337 @@
+{
+ "windows": [
+  [
+   2001,
+   2006
+  ],
+  [
+   2007,
+   2011
+  ],
+  [
+   2012,
+   2016
+  ],
+  [
+   2017,
+   2021
+  ],
+  [
+   2022,
+   2026
+  ]
+ ],
+ "sensor_change_year": 2012,
+ "grid_res_deg": 0.5,
+ "n_cells": 2136,
+ "n_shifted_cells": 51,
+ "regimes": [
+  {
+   "regime_id": 1,
+   "regime_name": "Occasional summer wildfires (peak Jul)",
+   "archetype": "seasonal_wildfire",
+   "color": "#E69F00",
+   "n_cells": 1564,
+   "mean_confidence": 0.627,
+   "summary": "A typical cell here sees about 75 hotspots a year, mostly in summer (peak July, about 3 months long). Fires average 16 MW per hotspot. Activity swings a lot between years.",
+   "profile": {
+    "hotspots_per_year": 74.75,
+    "fire_month_share": 0.215,
+    "active_year_share": 0.962,
+    "season_concentration": 0.816,
+    "season_length_months": 3.0,
+    "frp_mean": 15.869,
+    "frp_p95": 25.922,
+    "frp_skew": 0.577,
+    "longest_run_months": 2.0,
+    "runs_per_year": 1.652,
+    "interannual_cv": 1.446,
+    "trend_pct_per_year": 0.873,
+    "frp_trend_pct_per_year": 0.779,
+    "estimated_share": 0.296,
+    "peak_month": 7.0
+   },
+   "z_profile": {
+    "log_hotspots_per_year": 0.4,
+    "fire_month_share": 0.23,
+    "active_year_share": 0.33,
+    "season_sin": -0.04,
+    "season_cos": -0.32,
+    "season_concentration": 0.26,
+    "season_length_months": 0.01,
+    "log_frp_mean": 0.28,
+    "log_frp_p95": 0.26,
+    "frp_skew": -0.16,
+    "longest_run_months": 0.25,
+    "runs_per_year": 0.1,
+    "log_interannual_cv": 0.03
+   },
+   "monthly_curve": [
+    0.0,
+    0.0,
+    0.0,
+    0.0155,
+    0.1574,
+    0.1963,
+    0.285,
+    0.2478,
+    0.081,
+    0.0168,
+    0.0001,
+    0.0
+   ],
+   "n_shifted_cells": 30
+  },
+  {
+   "regime_id": 2,
+   "regime_name": "Higher-intensity rare low-intensity spring and autumn burning (agricultural-style)",
+   "archetype": "agricultural",
+   "color": "#F0E442",
+   "n_cells": 195,
+   "mean_confidence": 0.567,
+   "summary": "A typical cell here sees about 21 hotspots a year, mostly in spring and autumn (peak May, about 5 months long). Fires average 9 MW per hotspot and some get very large. Some years are much worse than others, and it is rising about 1% a year.",
+   "profile": {
+    "hotspots_per_year": 21.462,
+    "fire_month_share": 0.276,
+    "active_year_share": 1.0,
+    "season_concentration": 0.513,
+    "season_length_months": 5.0,
+    "frp_mean": 8.671,
+    "frp_p95": 19.465,
+    "frp_skew": 1.09,
+    "longest_run_months": 2.077,
+    "runs_per_year": 2.115,
+    "interannual_cv": 0.799,
+    "trend_pct_per_year": 1.059,
+    "frp_trend_pct_per_year": 0.744,
+    "estimated_share": 0.404,
+    "peak_month": 5.0
+   },
+   "z_profile": {
+    "log_hotspots_per_year": -0.43,
+    "fire_month_share": 1.04,
+    "active_year_share": 0.53,
+    "season_sin": 0.64,
+    "season_cos": 1.57,
+    "season_concentration": -1.69,
+    "season_length_months": 1.73,
+    "log_frp_mean": -1.33,
+    "log_frp_p95": -0.66,
+    "frp_skew": 2.35,
+    "longest_run_months": 0.45,
+    "runs_per_year": 1.48,
+    "log_interannual_cv": -1.21
+   },
+   "monthly_curve": [
+    0.0,
+    0.0,
+    0.0118,
+    0.1471,
+    0.2286,
+    0.1059,
+    0.1396,
+    0.1121,
+    0.0957,
+    0.1414,
+    0.0178,
+    0.0
+   ],
+   "n_shifted_cells": 6
+  },
+  {
+   "regime_id": 3,
+   "regime_name": "Lower-intensity rare low-intensity spring and autumn burning (agricultural-style)",
+   "archetype": "agricultural",
+   "color": "#0072B2",
+   "n_cells": 101,
+   "mean_confidence": 0.715,
+   "summary": "A typical cell here sees about 7 hotspots a year, spread across most of the year. Fires average 4 MW per hotspot. Some years are much worse than others, and it is rising about 1% a year.",
+   "profile": {
+    "hotspots_per_year": 7.038,
+    "fire_month_share": 0.141,
+    "active_year_share": 0.846,
+    "season_concentration": 0.285,
+    "season_length_months": 3.0,
+    "frp_mean": 3.969,
+    "frp_p95": 6.575,
+    "frp_skew": 0.463,
+    "longest_run_months": 1.353,
+    "runs_per_year": 1.542,
+    "interannual_cv": 0.868,
+    "trend_pct_per_year": 1.296,
+    "frp_trend_pct_per_year": 1.068,
+    "estimated_share": 0.392,
+    "peak_month": 5.0
+   },
+   "z_profile": {
+    "log_hotspots_per_year": -1.32,
+    "fire_month_share": -0.79,
+    "active_year_share": -0.26,
+    "season_sin": 1.2,
+    "season_cos": 3.17,
+    "season_concentration": -2.98,
+    "season_length_months": -0.29,
+    "log_frp_mean": -3.14,
+    "log_frp_p95": -3.74,
+    "frp_skew": -0.52,
+    "longest_run_months": -1.34,
+    "runs_per_year": -0.19,
+    "log_interannual_cv": -1.11
+   },
+   "monthly_curve": [
+    0.0,
+    0.0,
+    0.0097,
+    0.2705,
+    0.3117,
+    0.0033,
+    0.0056,
+    0.012,
+    0.1024,
+    0.2655,
+    0.0193,
+    0.0
+   ],
+   "n_shifted_cells": 0
+  },
+  {
+   "regime_id": 4,
+   "regime_name": "Rare, sporadic fires (peak Aug)",
+   "archetype": "sporadic",
+   "color": "#56B4E9",
+   "n_cells": 276,
+   "mean_confidence": 0.464,
+   "summary": "A typical cell here sees about 4 hotspots a year, mostly in summer (peak August, about 2 months long). Fires average 17 MW per hotspot. Activity swings a lot between years.",
+   "profile": {
+    "hotspots_per_year": 3.923,
+    "fire_month_share": 0.064,
+    "active_year_share": 0.519,
+    "season_concentration": 0.905,
+    "season_length_months": 2.0,
+    "frp_mean": 16.963,
+    "frp_p95": 26.172,
+    "frp_skew": 0.514,
+    "longest_run_months": 1.387,
+    "runs_per_year": 1.111,
+    "interannual_cv": 2.2,
+    "trend_pct_per_year": 0.0,
+    "frp_trend_pct_per_year": 0.0,
+    "estimated_share": 0.2,
+    "peak_month": 8.0
+   },
+   "z_profile": {
+    "log_hotspots_per_year": -1.49,
+    "fire_month_share": -1.77,
+    "active_year_share": -2.15,
+    "season_sin": -0.64,
+    "season_cos": -0.47,
+    "season_concentration": 0.81,
+    "season_length_months": -1.14,
+    "log_frp_mean": 0.48,
+    "log_frp_p95": 0.33,
+    "frp_skew": -0.54,
+    "longest_run_months": -1.27,
+    "runs_per_year": -1.55,
+    "log_interannual_cv": 1.1
+   },
+   "monthly_curve": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.1011,
+    0.1469,
+    0.3095,
+    0.3761,
+    0.0658,
+    0.0005,
+    0.0,
+    0.0
+   ],
+   "n_shifted_cells": 15
+  }
+ ],
+ "validation": {
+  "kmeans": {
+   "k": 4,
+   "silhouette": 0.4961533314630044,
+   "davies_bouldin": 0.7544133455465403,
+   "k_search": [
+    {
+     "k": 3,
+     "inertia": 12067.172032544435,
+     "silhouette": 0.4852005374909371,
+     "davies_bouldin": 0.8502642455772632
+    },
+    {
+     "k": 4,
+     "inertia": 9017.390713948276,
+     "silhouette": 0.4961533314630044,
+     "davies_bouldin": 0.7544133455465403
+    },
+    {
+     "k": 5,
+     "inertia": 7434.788492149157,
+     "silhouette": 0.3038039352367643,
+     "davies_bouldin": 1.0284183774514002
+    },
+    {
+     "k": 6,
+     "inertia": 6445.607496860608,
+     "silhouette": 0.3183603213095463,
+     "davies_bouldin": 0.9384798161750126
+    },
+    {
+     "k": 7,
+     "inertia": 5696.607356627726,
+     "silhouette": 0.3187552686112413,
+     "davies_bouldin": 0.9470722734377387
+    },
+    {
+     "k": 8,
+     "inertia": 5172.515587739085,
+     "silhouette": 0.2793368686952278,
+     "davies_bouldin": 1.0196551301879295
+    }
+   ]
+  },
+  "hdbscan": {
+   "n_clusters": 2,
+   "noise_share": 0.025749063670411985,
+   "silhouette_non_noise": 0.6355562776572632
+  },
+  "chosen": "kmeans",
+  "silhouette": 0.4961533314630044,
+  "davies_bouldin": 0.7544133455465403,
+  "seed_stability_ari": 1.0,
+  "year_split_stability_ari": 0.719852146196456,
+  "known_regions": [
+   {
+    "region": "Canadian boreal",
+    "cells": 1177,
+    "dominant_regime": "Occasional summer wildfires (peak Jul)",
+    "dominant_share": 0.89,
+    "matches_expectation": true
+   }
+  ],
+  "features_used": [
+   "log_hotspots_per_year",
+   "fire_month_share",
+   "active_year_share",
+   "season_sin",
+   "season_cos",
+   "season_concentration",
+   "season_length_months",
+   "log_frp_mean",
+   "log_frp_p95",
+   "frp_skew",
+   "longest_run_months",
+   "runs_per_year",
+   "log_interannual_cv"
+  ],
+  "cells_dropped": {
+   "static_cells_removed": 0,
+   "sparse_cells_removed": 83
+  }
+ }
+}
