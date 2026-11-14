@@ -3,7 +3,11 @@
 
 export const CONFIG = {
   // Show the "Demo data" tag in the header. Set to false once real data is in.
-  isDemoData: true,
+  isDemoData: false,
+
+  // What the record is, for the "Record" fact. hotspots.csv is real MODIS observations
+  // (NASA FIRMS, global, 2006 to 2026) until the harmonized MODIS + VIIRS record replaces it.
+  observedLabel: 'MODIS observations',
 
   // Where the data files are (see DATA_FORMAT.md for what goes in each one)
   files: {
@@ -16,7 +20,8 @@ export const CONFIG = {
   },
 
   // Size of one grid cell in degrees. Must match hotspots.csv.
-  cellSize: 0.5,
+  // 2 degrees keeps the global 21-year file small enough to load in a browser (~17 MB).
+  cellSize: 2,
 
   // The area selected when the page first opens: [south, west, north, east]
   defaultArea: [55, -119, 59.5, -110],
@@ -24,12 +29,15 @@ export const CONFIG = {
   // Quick picks in the "Area" menu: [south, west, north, east]
   presets: [
     { name: 'Northern Alberta', box: [55, -119, 59.5, -110] },
-    { name: 'Fort McMurray region', box: [55.5, -113, 58, -109.5] },
     { name: 'BC Interior', box: [49.5, -125, 54, -118.5] },
-    { name: 'Great Slave Lake, NWT', box: [59.5, -121, 63.5, -110] },
-    { name: 'Northern Saskatchewan', box: [54, -109.5, 58.5, -101.5] },
-    { name: 'Prairie cropland', box: [49, -114, 53, -98] },
-    { name: 'Jasper and the Rockies', box: [51.5, -119.5, 54, -116] },
+    { name: 'Canadian boreal forest', box: [52, -125, 62, -95] },
+    { name: 'California', box: [32, -124, 42, -114] },
+    { name: 'Amazon arc of deforestation', box: [-13, -65, -5, -45] },
+    { name: 'Central African savanna', box: [0, 10, 12, 35] },
+    { name: 'Southern African savanna', box: [-20, 15, -5, 35] },
+    { name: 'Punjab and Haryana, India', box: [28, 73, 32, 78] },
+    { name: 'Siberian taiga', box: [55, 95, 68, 135] },
+    { name: 'Northern Australia', box: [-18, 125, -11, 145] },
   ],
 
   // A month counts as "unusual" when its score is at least this many sigma

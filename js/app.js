@@ -190,7 +190,7 @@ function renderVerdict(picked, totals, cellsInside) {
         `<div><dt>Fire energy</dt><dd>${formatPower(totals.frp[i])}</dd></div>` +
         `<div><dt>Usual ${MONTHS[picked.month]}</dt><dd>${formatValue(v.usual, state.metric)}</dd></div>` +
         `<div><dt>Rank</dt><dd>${v.level === 'none' ? 'n/a' : `${v.rank} of ${v.yearsCompared}`}</dd></div>` +
-        `<div><dt>Record</dt><dd class="${estimated ? 'is-estimated' : 'is-observed'}">${Number.isNaN(v.estimatedShare) ? 'n/a' : estimated ? 'Estimated from MODIS' : 'Real VIIRS'}</dd></div>` +
+        `<div><dt>Record</dt><dd class="${estimated ? 'is-estimated' : 'is-observed'}">${Number.isNaN(v.estimatedShare) ? 'n/a' : estimated ? 'Estimated from MODIS' : (CONFIG.observedLabel || 'Real VIIRS')}</dd></div>` +
       '</dl>'
     $('clearMonth').onclick = () => update({ month: null })
     return
@@ -215,7 +215,7 @@ function renderVerdict(picked, totals, cellsInside) {
       (o.peakMonth !== undefined ? `<div><dt>Peak month</dt><dd>${MONTHS[o.peakMonth]}</dd></div>` : '') +
       `<div><dt>Record</dt><dd>${estimatedYears.length
         ? `${estimatedYears[0]} to ${estimatedYears[estimatedYears.length - 1]} estimated from MODIS`
-        : 'Real VIIRS'}</dd></div>` +
+        : (CONFIG.observedLabel || 'Real VIIRS')}</dd></div>` +
     '</dl>'
   if ($('seeTop')) $('seeTop').onclick = () => update({ month: monthKey(o.top.year, o.top.month) })
 }
