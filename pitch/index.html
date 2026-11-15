@@ -225,6 +225,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 .view iframe,.view img,.view video{width:100%;height:100%;border:0;object-fit:contain;background:#fff}
 .drop{display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center;color:var(--mut);font-size:26px;cursor:pointer;padding:60px;border:2px dashed var(--grid);border-radius:22px;transition:border-color .3s}
 .drop:hover,.drop.over{border-color:var(--sat);color:var(--ink)}
+.stopShare{position:absolute;right:16px;bottom:16px;background:#FBF8F2e6!important;font-size:16px!important;padding:10px 16px!important}
 .drop b{color:var(--ink);font-size:34px}
 .btn{font:700 22px 'Inter';padding:16px 28px;border-radius:999px;border:0;cursor:pointer;background:var(--sat);color:#fff;text-decoration:none}
 .btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--mut)}
@@ -426,7 +427,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 </section>
 
 <!-- ================= 5 · LIVE DEMO ================= -->
-<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Press L to load the live app (or drop a screen recording). Path: 1) Home: search “Northern Alberta” · 2) Fire Map: the fires light up · 3) Anomalies: 2023 flagged as far from normal · 4) Patterns: fire regimes · 5) Listen: play the season · 6) Trends: year by year. Say what the user learns at each click, not what the button does.">
+<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Press S (Share screen) and pick the window to show. If the demo runs on a teammate's laptop: they share their screen in a Discord/Zoom/Meet call, and you pick that call window here. Backup: L loads the live app, or drop a recording. Path: search “Northern Alberta” → Fire Map → Anomalies → Patterns → Listen → Trends. Say what the user learns at each click.">
   <div class="demo">
     <div class="vhead"><div><div class="kicker r" style="--d:.05">Live demo</div><h2 class="r" style="--d:.15">How does <em>Ember</em> work?</h2></div><small class="r" style="--d:.3">Better if we show you →</small></div>
     <div class="screen r" style="--d:.35">
@@ -434,9 +435,9 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
       <div class="view" id="view">
         <label class="drop" id="drop">
           <svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#0E6E7E" stroke-width="1.6"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
-          <b>Load the live app, or drop a screenshot / screen recording</b>
-          <span style="font-size:21px">Press <span class="mono">L</span> · click · or drag a file here</span>
-          <span style="display:flex;gap:12px"><button class="btn" id="loadApp" type="button">Load live app</button><a class="btn ghost" id="openApp" target="_blank" rel="noopener" href="#">Open in new tab</a></span>
+          <b>Share the demo screen, load the live app, or drop a recording</b>
+          <span style="font-size:21px"><span class="mono">S</span> share screen · <span class="mono">L</span> live app · or drag a file here</span>
+          <span style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"><button class="btn" id="shareScr" type="button" style="background:var(--ember)">Share screen</button><button class="btn" id="loadApp" type="button">Load live app</button><a class="btn ghost" id="openApp" target="_blank" rel="noopener" href="#">Open in new tab</a></span>
           <input type="file" id="file" accept="image/*,video/*" hidden>
         </label>
       </div>
@@ -510,7 +511,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
   <button id="hudN">1/7</button>
 </div>
 <div id="notes"></div>
-<div id="help">← → navigate · N notes · A auto-play · F fullscreen · R replay · L load app · P play sound</div>
+<div id="help">← → navigate · N notes · A auto-play · F fullscreen · R replay · S share screen · L load app · P play sound</div>
 
 <script>
 /* ===================== CONFIG: EDIT THESE ===================== */
@@ -518,14 +519,7 @@ const CONFIG = {
   team: "Syntax Terror",
   challenge: "Harmonization of MODIS and VIIRS Hot Spots",
   appUrl: "https://nasa-space-apps-2026-syntax-terror.github.io/Ember/",            // e.g. "https://your-team.github.io/ember/"  (used for the live demo + QR code)
-  members: [
-    {name:"Pearl",   role:"Fire regime clustering"},
-    {name:"Snavya",  role:"FIRMS data + forecast"},
-    {name:"Shriya",  role:"FRP calibration"},
-    {name:"Aashana", role:"MODIS→VIIRS super-resolution"},
-    {name:"Mridul",  role:"Sonification"},
-    {name:"Krish",   role:"[ROLE]"},
-  ],
+  members: ["Pearl","Snavya","Shriya","Aashana","Mridul","Krish"],
   // Official challenge video. Set start/end (seconds) to the clip you want to play on slide 2.
   problemVideo: { id:"tEPHsiZtuvk", start:0, end:0 },  // end:0 = play to the end
   talkSeconds: 300,      // talk clock limit in notes
@@ -540,9 +534,7 @@ const CONFIG = {
 
   /* ---- fill config ---- */
   document.getElementById('challengePill').textContent = 'Challenge: ' + CONFIG.challenge;
-  document.getElementById('teamRow').innerHTML = `<div><b>${CONFIG.team}</b>${CONFIG.members.map(m=>m.name).join(' · ')}</div>`;
-  const memEl = document.getElementById('members'); if (memEl) memEl.innerHTML = CONFIG.members.map((m,i)=>
-    `<div class="member"><div class="av" style="background:${avColors[i%6]}">${m.name[0]}</div><div><b>${m.name}</b><span>${m.role}</span></div></div>`).join('');
+  document.getElementById('teamRow').innerHTML = `<div><b>${CONFIG.team}</b>${CONFIG.members.join(' · ')}</div>`;
   slides.forEach(s => s.dataset.notes = (s.dataset.notes||'').replaceAll('[TEAM]',CONFIG.team).replaceAll('[CHALLENGE]',CONFIG.challenge));
   const openA = document.getElementById('openApp');
   if (CONFIG.appUrl){ openA.href = CONFIG.appUrl; document.getElementById('urlBar').textContent = CONFIG.appUrl.replace(/^https?:\/\//,''); } else openA.style.display='none';
@@ -624,6 +616,7 @@ const CONFIG = {
     else if (k==='n'||k==='N') notesEl.classList.toggle('on');
     else if (k==='a'||k==='A') toggleAuto();
     else if ((k==='l'||k==='L') && slides[cur].id==='s5') loadApp();
+    else if ((k==='s'||k==='S') && slides[cur].id==='s5') shareScreen();
     else if ((k==='p'||k==='P') && slides[cur].id==='s6') toggleSound();
     else if (k==='r'||k==='R') { const s = slides[cur]; s.classList.remove('active'); void s.offsetWidth; s.classList.add('active'); clearTimers(); enter(s); }
   });
@@ -645,6 +638,21 @@ const CONFIG = {
 
   /* ---- s5 demo ---- */
   const view = document.getElementById('view'), drop = document.getElementById('drop'), file = document.getElementById('file');
+  let scrStream = null;
+  async function shareScreen(){
+    try {
+      scrStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+      view.innerHTML = '<video id="scrVid" autoplay playsinline muted></video><button class="btn ghost stopShare" id="stopShare" type="button">Stop sharing</button>';
+      const v = document.getElementById('scrVid'); v.srcObject = scrStream;
+      document.getElementById('urlBar').textContent = 'live screen share';
+      document.getElementById('stopShare').onclick = e => { e.stopPropagation(); stopShare(); };
+      scrStream.getVideoTracks()[0].addEventListener('ended', stopShare);
+    } catch(e) {
+      const d = document.querySelector('#view .drop span'); if (d) d.textContent = 'Screen sharing was cancelled or blocked. Open the deck from its GitHub Pages link in Chrome or Edge.';
+    }
+  }
+  function stopShare(){ if (scrStream) scrStream.getTracks().forEach(t=>t.stop()); scrStream = null; location.reload(); }
+  document.getElementById('shareScr').onclick = e => { e.preventDefault(); e.stopPropagation(); shareScreen(); };
   function loadApp(){
     if (!CONFIG.appUrl){ file.click(); return; }
     view.innerHTML = `<iframe src="${CONFIG.appUrl}" allow="fullscreen; autoplay"></iframe>`;
