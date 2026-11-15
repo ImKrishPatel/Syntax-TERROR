@@ -418,7 +418,8 @@ function wireSearch(input, results, onPick) {
 function showApp() {
   document.body.classList.remove('is-start')
   window.scrollTo(0, 0)
-  requestAnimationFrame(() => { mapView.refresh(); mapView.fitArea() })
+  // wait for the layout to settle before sizing the map and zooming to the area
+  requestAnimationFrame(() => setTimeout(() => { mapView.refresh(); mapView.fitArea() }, 60))
 }
 function showStart() {
   document.body.classList.add('is-start')

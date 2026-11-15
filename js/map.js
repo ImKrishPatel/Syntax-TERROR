@@ -28,6 +28,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     boxZoom: false,   // Shift + drag draws a new area instead
   })
   L.control.zoom({ position: 'topright' }).addTo(map)
+  // keep Leaflet's idea of the map size right when the layout changes (search screen, resizing)
+  if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe(element)
   L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map)
 
   // Layers are stacked in "panes". Each pane gets its own canvas.
@@ -200,7 +202,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const MAX_LAT = 85.0511
   const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI / 360))
   const Y_MAX = mercY(MAX_LAT)
-  const IMG = Math.round(360 / CONFIG.cellSize) * 2          // 2 image pixels per cell
+  const IMG = Math.round(360 / CONFIG.cellSize)              // 1 image pixel per cell: the browser blends across whole cells
   const paint = document.createElement('canvas'); paint.width = paint.height = IMG
   const smooth = document.createElement('canvas'); smooth.width = smooth.height = IMG
   const heatPane = map.createPane('heat'); heatPane.style.zIndex = 250; heatPane.style.pointerEvents = 'none'
@@ -221,7 +223,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     })
     const out = smooth.getContext('2d')
     out.clearRect(0, 0, IMG, IMG)
-    out.filter = 'blur(0.8px)'
+    out.filter = 'blur(0.5px)'
     out.drawImage(paint, 0, 0)
     out.filter = 'none'
     fireImage.setUrl(smooth.toDataURL())
