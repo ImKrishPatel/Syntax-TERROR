@@ -60,7 +60,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   // -------------------------------------------------------------------------
   const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'
   const SENSORS = ['MODIS_Terra', 'MODIS_Aqua']
-  const DAY_OFFSETS = [-6, -3, 0, 3, 6]
+  const DAY_OFFSETS = [-4, 0, 4]
   let imageryDate = CONFIG.imageryDefaultDate || '2025-08-15'
   const shiftDate = (date, days) => new Date(Date.parse(date) + days * 864e5).toISOString().slice(0, 10)
   const TODAY = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
@@ -277,9 +277,9 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       let k = 0
       while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
       const level = breaks.length > 1 ? k / (breaks.length - 1) : 1
-      if (level < 0.4) return                      // the quietest squares stay clear, so the picture shows
-      const t = (level - 0.4) / 0.6
-      ctx.globalAlpha = Math.pow(t, 1.2) * 0.65 + 0.3
+      if (level < 0.5) return                      // the quietest squares stay clear, so the picture shows
+      const t = (level - 0.5) / 0.5
+      ctx.globalAlpha = Math.pow(t, 1.3) * 0.5 + 0.2
       const color = GLOW[Math.round(t * (GLOW.length - 1))]   // bright fire colours: amber to hot red
       const c = data.cells[i]
       const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
@@ -396,8 +396,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     // same rule as paintCells: the quietest classes are left clear, the rest glow amber to red
     const swatches = breaks.map((b, i) => {
       const level = breaks.length > 1 ? i / (breaks.length - 1) : 1
-      const t = (level - 0.4) / 0.6
-      const fill = level < 0.4 ? 'transparent; border: 1px dashed rgba(255,255,255,0.4)' : GLOW[Math.round(t * (GLOW.length - 1))]
+      const t = (level - 0.5) / 0.5
+      const fill = level < 0.5 ? 'transparent; border: 1px dashed rgba(255,255,255,0.4)' : GLOW[Math.round(t * (GLOW.length - 1))]
       return `<span><i style="background:${fill}"></i>${format(b)}${i === breaks.length - 1 ? '+' : ''}</span>`
     }).join('')
     legendElement.innerHTML =
