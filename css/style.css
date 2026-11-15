@@ -773,3 +773,5 @@ body.is-start .top, body.is-start .layout { display: none; }
 }
 
 #map { background: #2a2a22; }   /* behind the picture while tiles load */
+/* colour grade like the CONAE products: richer reds and greens */
+.leaflet-imagery-pane { filter: saturate(1.4) contrast(1.12) brightness(1.03); }

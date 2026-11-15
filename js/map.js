@@ -299,8 +299,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       if (!color) { dot.setStyle({ opacity: 0, fillOpacity: 0 }); dot.setRadius(0); return }
       let k = 0
       while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
-      dot.setRadius(2.5 + 6 * (breaks.length > 1 ? k / (breaks.length - 1) : 0.5))
-      dot.setStyle({ fillColor: color, fillOpacity: 0.9, opacity: 0.7 })
+      dot.setRadius(2 + 5 * (breaks.length > 1 ? k / (breaks.length - 1) : 0.5))
+      dot.setStyle({ fillColor: color, fillOpacity: 0.85, opacity: 0.6 })
     })
   }
   const sizeHeat = () => {}
@@ -384,7 +384,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   let area = null
   const WORLD_RING = [[-89, -400], [-89, 400], [89, 400], [89, -400]]
   const shade = L.polygon([WORLD_RING], {
-    renderer: areaCanvas, interactive: false, stroke: false, fillColor: '#000', fillOpacity: 0.25,
+    renderer: areaCanvas, interactive: false, stroke: false, fillColor: '#000', fillOpacity: 0.15,
   }).addTo(map)
   const box = L.rectangle([[0, 0], [1, 1]], {
     renderer: areaCanvas, interactive: false, fill: false, color: MAGENTA, weight: 2,
