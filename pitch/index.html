@@ -6,6 +6,7 @@
 <title>Ember · NASA Space Apps 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 /* ============ EDIT ME ============
    Team name, challenge, member names, app URL live in the CONFIG block in the script at the bottom.
@@ -225,6 +226,14 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 .view iframe,.view img,.view video{width:100%;height:100%;border:0;object-fit:contain;background:#fff}
 .drop{display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center;color:var(--mut);font-size:26px;cursor:pointer;padding:60px;border:2px dashed var(--grid);border-radius:22px;transition:border-color .3s}
 .drop:hover,.drop.over{border-color:var(--sat);color:var(--ink)}
+.recv-status{font:500 18px 'JetBrains Mono';color:#7A4E9E;max-width:900px;line-height:1.5}
+.recv-status a{color:#7A4E9E}
+#sender{position:fixed;inset:0;z-index:100;background:#F5F0E6;display:none;place-items:center;font-family:Inter,sans-serif;color:#1C1A17;text-align:center;padding:30px}
+#sender.on{display:grid}
+#sender h1{font-family:Fraunces,serif;font-size:56px;margin-bottom:10px}
+#sender p{font-size:20px;color:#5F5A52;max-width:620px;margin:10px auto}
+#sender .btn{font-size:24px;padding:18px 34px;margin-top:20px}
+#sendStatus{font:600 18px 'JetBrains Mono';margin-top:20px;color:#7A4E9E}
 .stopShare{position:absolute;right:16px;bottom:16px;background:#FBF8F2e6!important;font-size:16px!important;padding:10px 16px!important}
 .drop b{color:var(--ink);font-size:34px}
 .btn{font:700 22px 'Inter';padding:16px 28px;border-radius:999px;border:0;cursor:pointer;background:var(--sat);color:#fff;text-decoration:none}
@@ -294,7 +303,10 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 .end{display:grid;grid-template-columns:1fr 420px;gap:100px;align-items:center;height:100%}
 .end h1{font-size:104px}
 .qr{width:420px;height:420px;background:#fff;border-radius:26px;padding:30px;display:grid;place-items:center;border:1.5px solid var(--line);box-shadow:0 30px 70px -30px #3a2a1066;position:relative}
-.qr:after{content:"SCAN TO TRY EMBER";position:absolute;bottom:-44px;left:0;right:0;text-align:center;font:600 16px 'JetBrains Mono';letter-spacing:.3em;color:var(--dim)}
+.qr-col{display:flex;flex-direction:column;align-items:center;gap:14px}
+.qr-cap{font:600 16px 'JetBrains Mono';letter-spacing:.3em;text-transform:uppercase;color:var(--dim);margin-top:10px}
+.qr-url{font:600 20px/1.4 'JetBrains Mono';color:var(--ember);text-align:center;text-decoration:none;border-bottom:2px solid color-mix(in srgb,var(--ember) 35%,transparent)}
+.qr:after{content:none;position:absolute;bottom:-44px;left:0;right:0;text-align:center;font:600 16px 'JetBrains Mono';letter-spacing:.3em;color:var(--dim)}
 .qr img,.qr canvas{width:360px!important;height:360px!important}
 .qr .fallback{color:var(--ink);font:600 22px 'JetBrains Mono';text-align:center;word-break:break-all}
 /* ---------- chrome ---------- */
@@ -427,7 +439,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 </section>
 
 <!-- ================= 5 · LIVE DEMO ================= -->
-<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Press S (Share screen) and pick the window to show. If the demo runs on a teammate's laptop: they share their screen in a Discord/Zoom/Meet call, and you pick that call window here. Backup: L loads the live app, or drop a recording. Path: search “Northern Alberta” → Fire Map → Anomalies → Patterns → Listen → Trends. Say what the user learns at each click.">
+<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Teammate demo: press T (or click Teammate's screen) before you start talking. On the teammate's laptop open the deck link with ?send at the end, click Share my screen and pick the Ember window. Their screen appears here. Backups: S to share this laptop's screen or a call window, L to load the live app, or drop a recording. Path: search “Northern Alberta” → Fire Map → Anomalies → Patterns → Listen → Trends.">
   <div class="demo">
     <div class="vhead"><div><div class="kicker r" style="--d:.05">Live demo</div><h2 class="r" style="--d:.15">How does <em>Ember</em> work?</h2></div><small class="r" style="--d:.3">Better if we show you →</small></div>
     <div class="screen r" style="--d:.35">
@@ -435,9 +447,10 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
       <div class="view" id="view">
         <label class="drop" id="drop">
           <svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#0E6E7E" stroke-width="1.6"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
-          <b>Share the demo screen, load the live app, or drop a recording</b>
-          <span style="font-size:21px"><span class="mono">S</span> share screen · <span class="mono">L</span> live app · or drag a file here</span>
-          <span style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"><button class="btn" id="shareScr" type="button" style="background:var(--ember)">Share screen</button><button class="btn" id="loadApp" type="button">Load live app</button><a class="btn ghost" id="openApp" target="_blank" rel="noopener" href="#">Open in new tab</a></span>
+          <b>Show the demo: a teammate's screen, this screen, or the live app</b>
+          <span style="font-size:21px"><span class="mono">T</span> teammate · <span class="mono">S</span> this screen · <span class="mono">L</span> live app · or drag a file here</span>
+          <span class="recv-status" id="recvStatus"></span>
+          <span style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"><button class="btn" id="recvBtn" type="button" style="background:#7A4E9E">Teammate's screen</button><button class="btn" id="shareScr" type="button" style="background:var(--ember)">Share this screen</button><button class="btn" id="loadApp" type="button">Load live app</button><a class="btn ghost" id="openApp" target="_blank" rel="noopener" href="#">Open in new tab</a></span>
           <input type="file" id="file" accept="image/*,video/*" hidden>
         </label>
       </div>
@@ -494,7 +507,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
         <div class="r" style="--d:1"><b>Everyone</b>can see and hear the fire history of where they live</div>
       </div>
     </div>
-    <div class="qr r zoom" style="--d:1.1" id="qr"><img src="data:image/png;base64,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" alt="QR code to https://nasa-space-apps-2026-syntax-terror.github.io/Ember/"></div>
+    <div class="qr-col r zoom" style="--d:1.1"><div class="qr" id="qr"><img src="data:image/png;base64,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" alt="QR code to https://nasa-space-apps-2026-syntax-terror.github.io/Ember/"></div><div class="qr-cap">Scan to try Ember</div><a class="qr-url" href="https://nasa-space-apps-2026-syntax-terror.github.io/Ember/" target="_blank" rel="noopener">nasa-space-apps-2026-syntax-terror<br>.github.io/Ember</a></div>
   </div>
 </section>
 
@@ -503,6 +516,13 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 <div id="pageno">01 / 07</div>
 </div></div>
 
+<div id="sender"><div>
+  <h1>Share your screen with the pitch</h1>
+  <p>1. On the presenting laptop, go to <b>slide 5</b> and press <b>T</b>.<br>2. Click the button, then pick your Ember window or whole screen.</p>
+  <button class="btn" id="sendBtn" type="button" style="background:#7A4E9E">Share my screen</button>
+  <div id="sendStatus">Not sharing yet</div>
+  <p style="font-size:15px;margin-top:30px">Keep this tab open while presenting. Close it or click Stop in the browser bar to end.</p>
+</div></div>
 <div id="hud">
   <button id="prevB">◀</button><button id="nextB">▶</button>
   <button id="autoB" title="Auto-play for judges viewing alone (A)">AUTO</button>
@@ -511,7 +531,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
   <button id="hudN">1/7</button>
 </div>
 <div id="notes"></div>
-<div id="help">← → navigate · N notes · A auto-play · F fullscreen · R replay · S share screen · L load app · P play sound</div>
+<div id="help">← → navigate · N notes · A auto-play · F fullscreen · R replay · T teammate · S share screen · L load app · P play sound</div>
 
 <script>
 /* ===================== CONFIG: EDIT THESE ===================== */
@@ -522,6 +542,8 @@ const CONFIG = {
   members: ["Pearl","Snavya","Shriya","Aashana","Mridul","Krish"],
   // Official challenge video. Set start/end (seconds) to the clip you want to play on slide 2.
   problemVideo: { id:"tEPHsiZtuvk", start:0, end:0 },  // end:0 = play to the end
+  // Teammate screen link: teammate opens  <deck link>?send  and clicks "Share my screen".
+  peerRoom: "syntax-terror-ember-demo-2026",
   talkSeconds: 300,      // talk clock limit in notes
   autoSeconds: [8,16,12,12,14,16,10], // per-slide time in auto-play
 };
@@ -617,6 +639,7 @@ const CONFIG = {
     else if (k==='a'||k==='A') toggleAuto();
     else if ((k==='l'||k==='L') && slides[cur].id==='s5') loadApp();
     else if ((k==='s'||k==='S') && slides[cur].id==='s5') shareScreen();
+    else if ((k==='t'||k==='T') && slides[cur].id==='s5') startReceiving();
     else if ((k==='p'||k==='P') && slides[cur].id==='s6') toggleSound();
     else if (k==='r'||k==='R') { const s = slides[cur]; s.classList.remove('active'); void s.offsetWidth; s.classList.add('active'); clearTimers(); enter(s); }
   });
@@ -652,6 +675,64 @@ const CONFIG = {
     }
   }
   function stopShare(){ if (scrStream) scrStream.getTracks().forEach(t=>t.stop()); scrStream = null; location.reload(); }
+  /* ---- teammate screen over WebRTC (PeerJS) ---- */
+  const recvStatus = document.getElementById('recvStatus');
+  const senderLink = () => location.origin + location.pathname + '?send';
+  let rPeer = null;
+  function setRecv(t){ if (recvStatus) recvStatus.innerHTML = t; }
+  function startReceiving(){
+    if (rPeer && !rPeer.destroyed) return;
+    if (!window.Peer){ setRecv('Teammate screen needs internet (PeerJS did not load).'); return; }
+    setRecv('Connecting…');
+    rPeer = new Peer(CONFIG.peerRoom, { debug: 0 });
+    rPeer.on('open', () => setRecv(`Ready. On the teammate's laptop open:<br><a href="${senderLink()}" target="_blank" rel="noopener">${senderLink()}</a><br>and click “Share my screen”.`));
+    rPeer.on('call', call => {
+      call.answer();
+      setRecv('Teammate is connecting…');
+      call.on('stream', stream => {
+        view.innerHTML = '<video id="scrVid" autoplay playsinline muted></video><button class="btn ghost stopShare" id="stopShare" type="button">Stop</button>';
+        const v = document.getElementById('scrVid'); v.srcObject = stream; v.play().catch(()=>{});
+        document.getElementById('urlBar').textContent = "teammate's screen · live";
+        document.getElementById('stopShare').onclick = e => { e.stopPropagation(); call.close(); location.reload(); };
+      });
+      call.on('close', () => { if (document.getElementById('scrVid')) location.reload(); });
+      call.on('error', () => setRecv('Connection dropped. Ask your teammate to click Share again.'));
+    });
+    rPeer.on('error', err => {
+      if (err.type === 'unavailable-id') { setRecv('Room busy (deck open in another tab?). Retrying…'); rPeer.destroy(); rPeer = null; setTimeout(startReceiving, 4000); }
+      else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') setRecv('Network blocked the connection. Use a call (S) or the live app (L) instead.');
+      else setRecv('Error: ' + err.type);
+    });
+  }
+  document.getElementById('recvBtn').onclick = e => { e.preventDefault(); e.stopPropagation(); startReceiving(); };
+
+  /* sender mode: deck opened with ?send or #send */
+  if (/[?&]send\b/.test(location.search) || location.hash === '#send') {
+    document.getElementById('sender').classList.add('on'); document.getElementById('hud').style.display='none'; document.getElementById('help').style.display='none';
+    const st = document.getElementById('sendStatus');
+    let sPeer = null, sStream = null;
+    document.getElementById('sendBtn').onclick = async () => {
+      try { sStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false }); }
+      catch(e){ st.textContent = 'Screen picker was cancelled.'; return; }
+      if (!window.Peer){ st.textContent = 'PeerJS did not load. Check the internet connection.'; return; }
+      st.textContent = 'Connecting to the presenting laptop…';
+      sPeer = new Peer({ debug: 0 });
+      sPeer.on('open', () => {
+        const call = sPeer.call(CONFIG.peerRoom, sStream);
+        if (!call){ st.textContent = 'Could not start the call.'; return; }
+        call.on('stream', ()=>{});
+        setTimeout(()=>{ if (st.textContent.startsWith('Connecting')) st.textContent = '✓ Sharing. You should now appear on slide 5.'; }, 2500);
+        call.on('close', () => { st.textContent = 'Presenter closed the connection.'; });
+      });
+      sPeer.on('error', err => {
+        st.textContent = err.type === 'peer-unavailable' ? 'Presenter is not ready. On the presenting laptop go to slide 5 (press T), then click Share again.'
+                       : 'Connection failed (' + err.type + '). The network may block it: use a Discord/Zoom call instead.';
+        sStream.getTracks().forEach(t=>t.stop());
+      });
+      sStream.getVideoTracks()[0].addEventListener('ended', () => { st.textContent = 'Stopped sharing.'; try{ sPeer.destroy(); }catch(e){} });
+    };
+  }
+
   document.getElementById('shareScr').onclick = e => { e.preventDefault(); e.stopPropagation(); shareScreen(); };
   function loadApp(){
     if (!CONFIG.appUrl){ file.click(); return; }
