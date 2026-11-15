@@ -1,0 +1,12 @@
+{
+    "intercept": -0.07322176866967034,
+    "slope": 0.8184249905596379,
+    "equation": "MODIS_FRP = -0.07322 + 0.81842 * VIIRS_FRP",
+    "test_r2": 0.970312082753461,
+    "test_rmse_mw": 1.762195507328114,
+    "test_mae_mw": 1.4054361556983133,
+    "training_records": 696,
+    "testing_records": 174,
+    "total_matched_records": 870,
+    "data_type": "synthetic_prototype"
+}
