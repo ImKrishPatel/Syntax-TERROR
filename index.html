@@ -27,11 +27,26 @@
       <span class="brand-name">Ember Atlas</span>
       <span class="brand-team">21 years of the world's fires, in plain English · Syntax TERROR, NASA Space Apps 2026</span>
     </div>
+    <div class="search search-compact" role="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input id="placeSearch" type="search" placeholder="Search another place" autocomplete="off" aria-label="Search a place" aria-controls="placeResults" aria-expanded="false">
+      <ul class="search-results" id="placeResults" role="listbox" hidden></ul>
+    </div>
     <div class="top-actions">
       <span class="demo-tag" id="demoTag" hidden title="These numbers are made up for the demo. They are not real satellite measurements.">Demo data, not real measurements</span>
-      <button type="button" class="button" id="shareButton">Copy link to this view</button>
-      <div class="export">
-        <button type="button" class="button is-strong" id="exportButton" aria-expanded="false" aria-controls="exportPanel">Export CSV</button>
+      <div class="kebab">
+        <button type="button" class="kebab-button" id="menuButton" aria-haspopup="menu" aria-expanded="false" aria-controls="appMenu" title="More">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+          <span class="visually-hidden">More</span>
+        </button>
+        <div class="menu" id="appMenu" role="menu" hidden>
+          <button type="button" role="menuitem" id="shareButton">Copy link to this view</button>
+          <button type="button" role="menuitem" id="exportButton" aria-expanded="false" aria-controls="exportPanel">Export this area as CSV</button>
+          <button type="button" role="menuitem" id="coordsButton" aria-expanded="false" aria-controls="coordsPanel">Enter coordinates</button>
+          <button type="button" role="menuitem" id="aboutButton">About the data</button>
+          <hr>
+          <button type="button" role="menuitem" id="homeButton">Back to search</button>
+        </div>
         <div class="export-panel" id="exportPanel" hidden>
           <p id="exportText"></p>
           <div class="export-actions">
@@ -39,33 +54,47 @@
             <button type="button" class="button" id="copyCsvButton">Copy to clipboard</button>
           </div>
         </div>
-      </div>
-    </div>
-  </header>
-
-  <main class="layout">
-
-    <!-- Left: where -->
-    <section class="map-side" aria-label="Choose an area">
-      <form class="area-bar" id="areaForm">
-        <div class="search" role="search">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          <input id="placeSearch" type="search" placeholder="Search a place, e.g. Fort McMurray" autocomplete="off" aria-label="Search a place" aria-controls="placeResults" aria-expanded="false">
-          <ul class="search-results" id="placeResults" role="listbox" hidden></ul>
-        </div>
-        <div class="chips" id="presetChips" role="group" aria-label="Example areas"></div>
-        <details class="coords-box">
-          <summary>Enter coordinates</summary>
+        <form class="export-panel coords-panel" id="areaForm" hidden>
+          <p class="coords-title">Edges of the area, in degrees</p>
           <div class="coords" role="group" aria-label="Edges of the area in degrees">
             <label class="field"><span>North</span><input id="north" inputmode="decimal" autocomplete="off"></label>
             <label class="field"><span>South</span><input id="south" inputmode="decimal" autocomplete="off"></label>
             <label class="field"><span>West</span><input id="west" inputmode="decimal" autocomplete="off"></label>
             <label class="field"><span>East</span><input id="east" inputmode="decimal" autocomplete="off"></label>
-            <button type="submit" class="button">Apply</button>
           </div>
-        </details>
-        <p class="area-error" id="areaError" role="alert" hidden></p>
-      </form>
+          <p class="area-error" id="areaError" role="alert" hidden></p>
+          <div class="export-actions"><button type="submit" class="button is-strong">Show this area</button></div>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero" id="hero" aria-label="Start">
+    <div class="hero-inner">
+      <svg class="hero-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
+        <ellipse cx="16" cy="16" rx="6.5" ry="14.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
+        <path d="M2 16h28" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
+        <path d="M16.6 6.5c.6 3.4 4.9 5.6 4.9 10.6a5.5 5.5 0 0 1-11 .3c0-2.6 1.4-4.2 2.6-5.4.2 1.6.9 2.7 2 3.2-.6-3.3.2-6 1.5-8.7z" fill="#EB872B"/>
+        <path d="M16.2 14.6c.3 1.6 2.4 2.6 2.4 5a2.6 2.6 0 0 1-5.2.1c0-1.3.7-2.1 1.3-2.7.1.7.4 1.2.9 1.5-.2-1.5.1-2.8.6-3.9z" fill="#F8DC78"/>
+      </svg>
+      <h1 class="hero-title">Ember Atlas</h1>
+      <p class="hero-tag">21 years of the world's fires, in plain English.</p>
+      <div class="search search-hero" role="search">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <input id="heroSearch" type="search" placeholder="Search a place, e.g. Fort McMurray" autocomplete="off" aria-label="Search a place" aria-controls="heroResults" aria-expanded="false" autofocus>
+        <ul class="search-results" id="heroResults" role="listbox" hidden></ul>
+      </div>
+      <p class="hero-or">or start with one of these</p>
+      <div class="chips" id="presetChips" role="group" aria-label="Example areas"></div>
+      <p class="hero-foot" id="heroStatus">Loading 21 years of NASA satellite fire detections…</p>
+    </div>
+  </section>
+
+  <main class="layout">
+
+    <!-- Left: where -->
+    <section class="map-side" aria-label="Choose an area">
 
       <div class="map-wrap">
         <div id="map"></div>
@@ -175,14 +204,13 @@
       <footer class="foot">
         <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record puts both on the VIIRS scale so that 2005 can be compared with 2025.</p>
         <p><b>What is the score?</b> How far a month is from the average of that same calendar month, counted in standard deviations (σ). Around 0 is normal. 2 or more is unusual.</p>
-        <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite imagery and dark map: Esri. Place names for search: Natural Earth. Map libraries: Leaflet, Leaflet.heat. Typeface: Archivo.</p>
+        <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite imagery and dark map: Esri. Place names for search: Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
       </footer>
     </div>
   </main>
 
   <script src="vendor/leaflet.js"></script>
   <script src="vendor/topojson-client.min.js"></script>
-  <script src="vendor/leaflet-heat.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

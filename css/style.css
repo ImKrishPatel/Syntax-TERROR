@@ -643,3 +643,54 @@ code { font-family: inherit; font-weight: 600; overflow-wrap: anywhere; }
 a.button { color: inherit; text-decoration: none; display: inline-block; }
 
 .score-help { margin-top: 4px; font-size: 0.75rem; color: var(--ink-3); }
+
+/* ---------- search screen ---------- */
+.hero { display: none; }
+body.is-start .hero {
+  display: grid; place-items: center; min-height: 100vh; padding: 40px 20px;
+  background:
+    radial-gradient(60% 50% at 50% 38%, rgba(235, 135, 43, 0.16), transparent 70%),
+    radial-gradient(40% 35% at 70% 80%, rgba(240, 82, 159, 0.08), transparent 70%);
+}
+body.is-start .top, body.is-start .layout { display: none; }
+.hero-inner { width: min(640px, 100%); text-align: center; }
+.hero-mark { width: 84px; height: 84px; color: var(--ink); filter: drop-shadow(0 0 24px rgba(235, 135, 43, 0.35)); }
+.hero-title { margin-top: 14px; font-size: clamp(2.4rem, 6vw, 3.6rem); font-weight: 800; font-variation-settings: var(--condensed); letter-spacing: 0.01em; line-height: 1; }
+.hero-tag { margin-top: 10px; color: var(--ink-2); font-size: 1.1rem; }
+.search-hero { margin: 28px auto 0; text-align: left; }
+.search-hero input { padding: 14px 18px 14px 44px; font-size: 1.05rem; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); }
+.search-hero svg { left: 16px; width: 18px; height: 18px; }
+.hero-or { margin-top: 22px; color: var(--ink-3); font-size: 0.85rem; }
+.hero .chips { justify-content: center; margin-top: 10px; }
+.hero-foot { margin-top: 30px; color: var(--ink-3); font-size: 0.8rem; }
+
+/* ---------- top bar: compact search + ⋮ menu ---------- */
+.search-compact { flex: 0 1 340px; min-width: 160px; margin-left: auto; }
+.search-compact input { padding: 6px 12px 6px 32px; }
+.kebab { position: relative; }
+.kebab-button {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  border: 1px solid var(--rule-strong); border-radius: 50%; background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.kebab-button:hover, .kebab-button[aria-expanded="true"] { border-color: var(--ink-2); }
+.kebab-button svg { width: 16px; height: 16px; fill: currentColor; }
+.menu, .kebab .export-panel {
+  position: absolute; z-index: 1400; right: 0; top: calc(100% + 6px); min-width: 230px;
+  padding: 6px; border: 1px solid var(--rule-strong); border-radius: 10px;
+  background: #101815; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+.menu[hidden], .kebab .export-panel[hidden] { display: none; }
+.menu button {
+  display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px;
+  background: none; text-align: left; cursor: pointer;
+}
+.menu button:hover, .menu button:focus-visible { background: var(--rule); }
+.menu hr { margin: 5px 4px; border: 0; border-top: 1px solid var(--rule); }
+.kebab .export-panel { width: 320px; padding: 14px; }
+.coords-title { font-weight: 600; margin-bottom: 8px; }
+.coords-panel .coords { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.coords-panel .field input { width: 100%; }
+.coords-panel .export-actions { margin-top: 12px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fire-image { image-rendering: auto; opacity: 0.88; }
+#map.is-satellite .fire-image { opacity: 0.72; }

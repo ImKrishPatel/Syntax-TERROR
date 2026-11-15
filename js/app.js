@@ -385,6 +385,47 @@ function currentCsv() {
   return { ...rowsAsCsv(state.area, first, last), name }
 }
 
+function wireSearch(input, results, onPick) {
+  let hits = []
+  const close = () => { results.hidden = true; input.setAttribute('aria-expanded', 'false') }
+  const pick = place => { input.value = ''; close(); onPick(place) }
+  input.oninput = () => {
+    const q = input.value.trim().toLowerCase()
+    if (q.length < 2) { close(); return }
+    const seen = new Set()
+    hits = mapView.getPlaces()
+      .filter(p => p.name && p.name.toLowerCase().includes(q) && !seen.has(p.name) && seen.add(p.name))
+      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.rank - b.rank)
+      .slice(0, 8)
+    results.innerHTML = hits.length
+      ? hits.map((p, i) => `<li role="option" data-i="${i}">${p.name}<span>${degrees(Math.round(p.lat * 10) / 10, 'N', 'S')}, ${degrees(Math.round(p.lon * 10) / 10, 'E', 'W')}</span></li>`).join('')
+      : '<li class="none">No place with that name yet. Try a nearby city.</li>'
+    results.hidden = false
+    input.setAttribute('aria-expanded', 'true')
+  }
+  input.onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); if (hits[0]) pick(hits[0]) }
+    if (e.key === 'Escape') close()
+  }
+  results.onmousedown = e => {
+    const li = e.target.closest('li[data-i]')
+    if (li) { e.preventDefault(); pick(hits[Number(li.dataset.i)]) }
+  }
+  input.onblur = () => setTimeout(close, 150)
+}
+
+// the search screen and the app
+function showApp() {
+  document.body.classList.remove('is-start')
+  window.scrollTo(0, 0)
+  requestAnimationFrame(() => { mapView.refresh(); mapView.fitArea() })
+}
+function showStart() {
+  document.body.classList.add('is-start')
+  window.scrollTo(0, 0)
+  $('heroSearch').focus()
+}
+
 function stopListening() {
   stopCalendar()
   markPlaying($('calendar'), null)
@@ -409,7 +450,7 @@ function startPlaying() {
 }
 
 function wireControls() {
-  // example areas as chips
+  // example areas as chips (on the search screen)
   const chips = $('presetChips')
   chips.innerHTML = [...CONFIG.presets.map(p => p.name), 'Whole world']
     .map(n => `<button type="button" class="chip" aria-pressed="false">${n}</button>`).join('')
@@ -417,45 +458,19 @@ function wireControls() {
     b.onclick = () => {
       const preset = CONFIG.presets.find(p => p.name === b.textContent)
       update({ area: [...(preset ? preset.box : data.bounds)] })
-      mapView.fitArea()
+      showApp()
     }
   })
 
   // place search: the place names the map already has, no outside service
-  const search = $('placeSearch'), results = $('placeResults')
-  let hits = []
-  const closeResults = () => { results.hidden = true; search.setAttribute('aria-expanded', 'false') }
   const goTo = place => {
     const [s0, w0, n0, e0] = state.area
-    const hLat = Math.min(4, (n0 - s0) / 2), hLon = Math.min(6, (e0 - w0) / 2)
+    const hLat = Math.min(4, Math.max(1.5, (n0 - s0) / 2)), hLon = Math.min(6, Math.max(2, (e0 - w0) / 2))
     update({ area: [place.lat - hLat, place.lon - hLon, place.lat + hLat, place.lon + hLon].map(v => Math.round(v * 10) / 10) })
-    mapView.fitArea()
-    search.value = place.name
-    closeResults()
+    showApp()
   }
-  search.oninput = () => {
-    const q = search.value.trim().toLowerCase()
-    if (q.length < 2) { closeResults(); return }
-    const seen = new Set()
-    hits = mapView.getPlaces()
-      .filter(p => p.name && p.name.toLowerCase().includes(q) && !seen.has(p.name) && seen.add(p.name))
-      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.rank - b.rank)
-      .slice(0, 8)
-    results.innerHTML = hits.length
-      ? hits.map((p, i) => `<li role="option" data-i="${i}">${p.name}<span>${degrees(Math.round(p.lat * 10) / 10, 'N', 'S')}, ${degrees(Math.round(p.lon * 10) / 10, 'E', 'W')}</span></li>`).join('')
-      : '<li class="none">No place with that name. Try a nearby city.</li>'
-    results.hidden = false
-    search.setAttribute('aria-expanded', 'true')
-  }
-  search.onkeydown = e => {
-    if (e.key === 'Enter') { e.preventDefault(); if (hits[0]) goTo(hits[0]) }
-    if (e.key === 'Escape') closeResults()
-  }
-  results.onmousedown = e => {
-    const li = e.target.closest('li[data-i]')
-    if (li) { e.preventDefault(); goTo(hits[Number(li.dataset.i)]) }
-  }
-  search.onblur = () => setTimeout(closeResults, 150)
+  wireSearch($('heroSearch'), $('heroResults'), goTo)
+  wireSearch($('placeSearch'), $('placeResults'), goTo)
 
   // map key behind an info button
   $('legendToggle').onclick = () => {
@@ -491,6 +506,7 @@ function wireControls() {
     if (problem) return
     update({ area: [s, w, n, e] })
     mapView.fitArea()
+    $('areaForm').hidden = true
   }
 
   // years
@@ -523,23 +539,32 @@ function wireControls() {
     startPlaying()
   }
 
-  // share
+  // the ⋮ menu
+  const menu = $('appMenu'), menuButton = $('menuButton')
+  const panels = [$('exportPanel'), $('areaForm')]
+  const closeMenu = () => { menu.hidden = true; menuButton.setAttribute('aria-expanded', 'false') }
+  const closePanels = () => { panels.forEach(p => { p.hidden = true }); $('exportButton').setAttribute('aria-expanded', 'false'); $('coordsButton').setAttribute('aria-expanded', 'false') }
+  const openPanel = (panel, button) => { closeMenu(); closePanels(); panel.hidden = false; button.setAttribute('aria-expanded', 'true') }
+  menuButton.onclick = () => {
+    const open = menu.hidden
+    closePanels()
+    menu.hidden = !open
+    menuButton.setAttribute('aria-expanded', String(open))
+    if (open) menu.querySelector('button').focus()
+  }
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.kebab')) { closeMenu(); closePanels() }
+  })
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMenu(); closePanels() } })
+
   $('shareButton').onclick = async () => {
     const ok = await copyText(location.href)
     flash($('shareButton'), ok ? 'Link copied' : 'Copy the address bar instead')
   }
-
-  // export
-  const panel = $('exportPanel'), exportButton = $('exportButton')
-  const closeExport = () => { panel.hidden = true; exportButton.setAttribute('aria-expanded', 'false') }
-  exportButton.onclick = () => {
-    panel.hidden = !panel.hidden
-    exportButton.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true')
-  }
-  document.addEventListener('click', event => {
-    if (!panel.hidden && !event.target.closest('.export')) closeExport()
-  })
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeExport() })
+  $('exportButton').onclick = () => openPanel($('exportPanel'), $('exportButton'))
+  $('coordsButton').onclick = () => { openPanel($('areaForm'), $('coordsButton')); $('north').focus() }
+  $('aboutButton').onclick = () => { closeMenu(); showApp(); document.querySelector('.foot').scrollIntoView({ behavior: 'smooth' }) }
+  $('homeButton').onclick = () => { closeMenu(); showStart() }
   $('downloadButton').onclick = () => {
     const csv = currentCsv()
     const link = document.createElement('a')
@@ -561,6 +586,8 @@ function wireControls() {
 // ---------------------------------------------------------------------------
 async function start() {
   $('demoTag').hidden = !CONFIG.isDemoData
+  // a shared link (with an area in it) opens straight on the map; otherwise start on the search screen
+  if (!new URLSearchParams(location.hash.slice(1)).get('area')) document.body.classList.add('is-start')
 
   mapView = createMap($('map'), $('mapLegend'), {
     onAreaChange: area => update({ area }),
@@ -579,6 +606,7 @@ async function start() {
 
   state.fromYear = data.firstYear
   state.toYear = data.lastYear
+  $('heroStatus').textContent = `NASA satellite fire detections for the whole world, ${data.firstYear} to ${data.lastYear}.`
   readAddress()
   wireControls()
   mapView.buildCells()

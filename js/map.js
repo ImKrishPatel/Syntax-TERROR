@@ -122,6 +122,9 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const gridLines = L.layerGroup().addTo(map)
   const gridLabels = L.DomUtil.create('div', 'graticule-labels', element)
   function drawGraticule() {
+    // the satellite and dark map tiles carry their own context; a lat/lon grid only cluttered them
+    gridLines.clearLayers(); gridLabels.innerHTML = ''
+    return
     const step = map.getZoom() >= 5.5 ? 2 : map.getZoom() >= 3.75 ? 5 : 10
     gridLines.clearLayers()
     const style = { renderer: baseCanvas, interactive: false, color: INK, opacity: 0.13, weight: 0.6 }
@@ -130,6 +133,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     labelGraticule()
   }
   function labelGraticule() {
+    return
     const step = map.getZoom() >= 5.5 ? 2 : map.getZoom() >= 3.75 ? 5 : 10
     const b = map.getBounds(), size = map.getSize(), centre = map.getCenter()
     let html = ''
@@ -189,52 +193,51 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   }
 
   // values: { count, frp } with one number per cell. period: text for the tooltip.
-  // Hotspots are drawn as a soft glow (Leaflet.heat) instead of hard squares.
-  // The squares stay, invisible, so hovering still shows each cell's numbers.
-  const heat = L.heatLayer([], {
-    minOpacity: 0.25, maxZoom: 1, max: 1,   // maxZoom below minZoom: intensity never rescales with zoom
-    gradient: { 0.15: FIRE_RAMP[0], 0.35: FIRE_RAMP[1], 0.55: FIRE_RAMP[2], 0.72: FIRE_RAMP[3], 0.88: FIRE_RAMP[4], 1: FIRE_RAMP[5] },
-  })
+  // Hotspots are drawn as one smoothly blended image instead of hard squares:
+  // each cell is painted into a small canvas laid out in Web Mercator (the map's projection),
+  // and the browser blends neighbouring cells as it scales the image up. The squares stay,
+  // invisible, so hovering still shows each cell's numbers.
+  const MAX_LAT = 85.0511
+  const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI / 360))
+  const Y_MAX = mercY(MAX_LAT)
+  const IMG = Math.round(360 / CONFIG.cellSize) * 2          // 2 image pixels per cell
+  const paint = document.createElement('canvas'); paint.width = paint.height = IMG
+  const smooth = document.createElement('canvas'); smooth.width = smooth.height = IMG
   const heatPane = map.createPane('heat'); heatPane.style.zIndex = 250; heatPane.style.pointerEvents = 'none'
-  function sizeHeat() {
-    // radius follows the size of one grid cell on screen
-    if (!map.hasLayer(heat)) return
-    // a cell is taller than wide away from the equator (Mercator), so size by the larger side at the view's latitude
-    const lat = Math.max(-80, Math.min(80, map.getCenter().lat)), h = CONFIG.cellSize / 2
-    const a = map.latLngToContainerPoint([lat - h, 0]), b = map.latLngToContainerPoint([lat + h, CONFIG.cellSize])
-    const px = Math.max(6, Math.abs(b.x - a.x), Math.abs(b.y - a.y))
-    heat.setOptions({ radius: px * 0.7, blur: px * 0.5 })
+  const fireImage = L.imageOverlay(smooth.toDataURL(), [[-MAX_LAT, -180], [MAX_LAT, 180]], {
+    pane: 'heat', interactive: false, className: 'fire-image',
+  })
+  function paintCells(v, breaks) {
+    const ctx = paint.getContext('2d')
+    ctx.clearRect(0, 0, IMG, IMG)
+    v.forEach((value, i) => {
+      const color = fireColor(value, breaks)
+      if (!color) return
+      const c = data.cells[i]
+      const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
+      const y0 = (Y_MAX - mercY(c.lat + half)) / (2 * Y_MAX) * IMG, y1 = (Y_MAX - mercY(c.lat - half)) / (2 * Y_MAX) * IMG
+      ctx.fillStyle = color
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
+    })
+    const out = smooth.getContext('2d')
+    out.clearRect(0, 0, IMG, IMG)
+    out.filter = 'blur(0.8px)'
+    out.drawImage(paint, 0, 0)
+    out.filter = 'none'
+    fireImage.setUrl(smooth.toDataURL())
   }
-  map.on('zoomend moveend', sizeHeat)
-  // Leaflet.heat always puts its canvas in the overlay pane; move it under the area box and back
-  let heatPoints = []
-  function addHeat() {
-    if (map.hasLayer(heat)) return
-    heat.addTo(map); heatPane.appendChild(heat._canvas); sizeHeat()
-    heat.setLatLngs(heatPoints)
-  }
-  function removeHeat() {
-    if (!map.hasLayer(heat)) return
-    if (heat._frame) { L.Util.cancelAnimFrame(heat._frame); heat._frame = null }
-    map.getPanes().overlayPane.appendChild(heat._canvas)
-    map.removeLayer(heat)
-  }
+  let heatPoints = null   // kept for the old name used by refresh()
+  const addHeat = () => { if (!map.hasLayer(fireImage)) fireImage.addTo(map) }
+  const removeHeat = () => { if (map.hasLayer(fireImage)) map.removeLayer(fireImage) }
+  const sizeHeat = () => {}
 
   function setCells(values, metric, period) {
     cellValues = values; cellMetric = metric; cellPeriod = period
     const v = values[metric]
     const breaks = fireBreaks(v)
-    const points = []
-    v.forEach((value, i) => {
-      if (!value) return
-      let step = 0
-      while (step < breaks.length - 1 && value >= breaks[step + 1]) step++
-      const c = data.cells[i]
-      points.push([c.lat, c.lon, (step + 1) / breaks.length])
-    })
+    paintCells(v, breaks)
     cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
-    heatPoints = points
-    if (showing === 'hotspots') { addHeat(); sizeHeat(); heat.setLatLngs(points) }
+    if (showing === 'hotspots') addHeat()
     hotspotLegend = { breaks, metric, period }
     drawLegend()
   }
@@ -451,6 +454,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   return {
     map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setBasemap,
     getPlaces: () => places,
+    refresh: () => { map.invalidateSize(); if (showing === 'hotspots') addHeat() },
     openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),
     isShowing: () => showing,
     setArea, fitArea, startDrawing,
