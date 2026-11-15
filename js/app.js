@@ -12,7 +12,7 @@ import { SCORE_STEPS } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { createListeningPanel } from './sound.js'
+import { createListeningPanel } from './sound.js?v=voice-shortcut-3'
 
 const $ = id => document.getElementById(id)
 
@@ -413,6 +413,7 @@ function wireControls() {
   listening = createListeningPanel({
     onPick: (year, month) => update({ month: monthKey(year,month) }, true),
     onMode: mode => update({mode}),
+    onMetric: metric => update({metric}),
     onHighlight: (row, month) => markPlaying($('calendar'),row,month),
   })
 

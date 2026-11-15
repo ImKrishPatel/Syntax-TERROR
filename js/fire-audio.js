@@ -66,7 +66,7 @@ export function createPlayer() {
     await sleep(450 / speed);
     return token === generation;
   }
-  return {play, stop, dispose() { stop(); if (context) context.close(); }};
+  return {play, stop, ready, dispose() { stop(); if (context) context.close(); }};
 }
 export function soundFor(month, mode, max) {
   if (month.status === 'missing' || !Number.isFinite(month.activity)) return [180,180];

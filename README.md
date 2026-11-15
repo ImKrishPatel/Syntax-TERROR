@@ -99,3 +99,34 @@ variation. Anomaly shortcuts use the existing two-sigma unusual threshold.
 FRP audio descriptions use megawatts of summed fire radiative power, not energy.
 
 Checks: `node --test tests/listening.test.mjs`.
+
+### Microphone commands
+
+The **Speak** microphone button beside Listen accepts one English command per click:
+
+- `2024 Activity` (or just `2024`): January–December activity playback.
+- `2024 Unusual Activity`: January–December anomaly playback.
+- `April 2024 Activity` / `April 2024 Unusual Activity`: only that month.
+- `Slow` / `Normal` / `Fast`: 0.75× / 1× / 1.5×.
+- `2024 Season Overview`: the existing spoken summary with half-second punctuation gaps.
+- `2024 Strongest Ano`: select the strongest qualifying anomaly and play its spoken description followed by anomaly tones, once. No qualifying anomaly gets a spoken explanation.
+- `Leave`: cancel the microphone action without playing data.
+- `Keyword Guide`: open the guide inside Listen and read every keyword and its short purpose in order.
+- `2024 Fire Energy` / `2024 Fire Energy Unusual`: full-year FRP activity or anomaly playback.
+- `April 2024 Fire Energy` / `April 2024 Fire Energy Unusual`: one month of FRP activity or anomaly playback.
+- `Sound Guide`: speak each example's name and play its pattern sequentially, in guide order.
+
+Replace the year/month with any supported value within the selected year range.
+Commands use the current geographic area. Activity commands select hotspots; Fire Energy commands select FRP. Overview and Strongest Ano use the current measure. Voice requests enable spoken
+month descriptions and unmute audio; zero volume is restored to 60%. Unknown
+commands say exactly “Try again with right keyword”. A new microphone click stops
+previous playback. There are no voice replay/back/forward commands.
+
+Uses the browser Web Speech API, with an explicit microphone-permission prompt.
+Speech recognition may use the browser provider's online service. There is no
+application recording storage. Unsupported browsers keep regular Listen controls.
+Permission, device and network failures get distinct explanations.
+
+Run `node --test tests/*.mjs`. Automated tests exercise command parsing, mocked
+recognition lifecycle and audio dispatch; real microphone recognition and audio
+quality require a manual browser check with the user's microphone.
