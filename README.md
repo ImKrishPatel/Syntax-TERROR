@@ -37,7 +37,7 @@ Then open http://localhost:8000 in your browser. Press Ctrl+C in the terminal to
 | --- | --- |
 | `index.html` | the page |
 | `css/style.css` | all the styling |
-| `js/config.js` | settings: file paths, default area, area menu, demo tag |
+| `js/config.js` | settings: file paths, default area, area menu |
 | `js/app.js` | the main file: keeps track of what is selected and redraws the page |
 | `js/data.js` | loads `hotspots.csv` and adds up hotspots for an area |
 | `js/stats.js` | usual values, anomaly score, the verdict sentence |
@@ -50,20 +50,19 @@ Then open http://localhost:8000 in your browser. Press Ctrl+C in the terminal to
 | `public/data/` | data files. Format: [DATA_FORMAT.md](DATA_FORMAT.md) |
 | `public/basemap/` | coastlines, borders, lakes and towns for the map |
 | `vendor/` | Leaflet and topojson-client, copied in so the app works offline |
-| `scripts/make-mock-data.mjs` | makes the demo data |
 | `analysis/` | Python analysis code (fire regimes) |
 
-## Demo data
+## Data
 
-The numbers in `public/data/` are made up so the app has something to show. To remake them:
+Everything in `public/data/` comes from real NASA FIRMS detections (MODIS C6.1, 2006 to 2026):
 
 ```bash
-node scripts/make-mock-data.mjs
+python -m analysis.hotspots_csv --firms data/*.zip --sensor MODIS --res 2 --start 2006-01
 python -m analysis.fire_regimes.run
 ```
 
-To use real data, replace the files (see [DATA_FORMAT.md](DATA_FORMAT.md)) and set
-`isDemoData: false` in `js/config.js`.
+`validation.json` holds the MODIS/VIIRS checks (from `shriya_backend` and `spatial_ml`).
+The forecast panel appears once a real `forecast.json` is added (format in [DATA_FORMAT.md](DATA_FORMAT.md)).
 
 ## Credits
 
@@ -89,7 +88,7 @@ The listening mode and calendar colour mode stay synchronized.
 
 Summary speech uses the selected speed and a fixed half-second gap after periods
 and semicolons. The sound guide includes named examples; the guided tutorial is
-not included in this version. All current repository data remains demo data.
+not included in this version. The app's data is real (NASA FIRMS); the forecast is not connected yet.
 
 `js/listening-model.js` adapts the shared calendar table. Missing months and areas
 without grid cells are unavailable, not zero. Within covered areas, the upstream

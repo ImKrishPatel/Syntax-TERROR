@@ -2,7 +2,7 @@
 
 All data files live in `public/data/`. The app loads them in the browser; there is no backend.
 `hotspots.csv`, `fire_regimes.geojson` and `regime_summary.json` are now **real data** (NASA FIRMS MODIS, whole world).
-`forecast.json` and `validation.json` are still demo files made by `node scripts/make-mock-data.mjs`.
+`validation.json` holds real checks (see the numbers in it). `forecast.json` is optional: the forecast panel stays hidden until a real forecast file exists.
 
 To plug in real data, replace a file with one of the same name and format, then reload the page.
 When the real hotspot record is in, set `isDemoData: false` in `js/config.js` to remove the "Demo data" tag.
@@ -30,7 +30,6 @@ The harmonized record. One row per grid cell per month. Leave out rows with zero
   an observation). 2 degrees keeps the file at ~17 MB so the browser can load it; the regime layer keeps
   0.5 degree detail. It will be replaced by the harmonized record. If the grid size changes, change
   `cellSize` in `js/config.js`.
-- Do not run `node scripts/make-mock-data.mjs` now: it would overwrite the real files with demo data.
 - The area can be anywhere on Earth. The map draws a dashed outline around whatever the file covers.
 
 ## 2. Fire regimes: `public/data/fire_regimes.geojson` and `regime_summary.json` (Pearl)

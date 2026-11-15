@@ -1,25 +1,25 @@
 {
- "is_demo": true,
- "overlap_period": "2012 to 2024",
- "note": "Model estimates compared with real VIIRS in years where both sensors were flying.",
+ "is_demo": false,
+ "overlap_period": "Nov 2021 to Aug 2026 for matching; 2022 fire season for the other two checks",
+ "note": "Checked on real NASA FIRMS detections where MODIS and VIIRS both flew.",
  "metrics": [
   {
-   "label": "Monthly hotspot counts",
-   "value": "0.93",
+   "label": "MODIS detections also seen by VIIRS",
+   "value": "28",
+   "unit": "%",
+   "detail": "within 1 km and 60 minutes; 18.9 million MODIS detections over 1,693 days. VIIRS sees many small fires MODIS misses, so most VIIRS detections have no MODIS twin."
+  },
+  {
+   "label": "Fire energy agreement at map scale",
+   "value": "0.48",
    "unit": "R²",
-   "detail": "estimated vs real VIIRS, per cell"
+   "detail": "VIIRS fire energy predicting MODIS, summed per 2° square per day, on later days than the model was fitted on. Pixel by pixel it is only 0.07, so the map compares areas, never single pixels."
   },
   {
-   "label": "Fire energy (FRP)",
-   "value": "11",
-   "unit": "% error",
-   "detail": "median error after calibration"
-  },
-  {
-   "label": "Fire or no fire",
-   "value": "0.88",
-   "unit": "F1",
-   "detail": "per 375 m pixel, held-out year"
+   "label": "Finding the fire inside a MODIS pixel",
+   "value": "0.60",
+   "unit": "ROC-AUC",
+   "detail": "which 375 m cell VIIRS lights up, guessed from MODIS (0.5 = chance). Too weak to draw on the map yet."
   }
  ]
 }
