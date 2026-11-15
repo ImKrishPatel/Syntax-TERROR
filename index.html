@@ -11,19 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="css/style.css?v=main-voice-7">
+  <link rel="stylesheet" href="css/style.css?v=fresh-start-8">
 
-  <!-- set light or dark before the page draws, so it does not flash the wrong one -->
-  <script>
-    (function () {
-      var theme = null
-      try { theme = localStorage.getItem('ember.theme') } catch (err) { /* storage may be blocked */ }
-      if (theme !== 'light' && theme !== 'dark') {
-        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      }
-      document.documentElement.dataset.theme = theme
-    })()
-  </script>
+  <!-- Every new visit starts with the same light theme. -->
+  <script>document.documentElement.dataset.theme = 'light'</script>
 </head>
 <body data-page="home">
 
@@ -388,6 +379,6 @@
 
   <script src="vendor/leaflet.js"></script>
   <script src="vendor/topojson-client.min.js"></script>
-  <script type="module" src="js/app.js?v=main-voice-7"></script>
+  <script type="module" src="js/app.js?v=fresh-start-8"></script>
 </body>
 </html>

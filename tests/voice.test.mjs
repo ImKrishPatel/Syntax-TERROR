@@ -117,3 +117,30 @@ test('Speak shortcut starts recognition once and respects disabled and held keys
  mic.cancel();key();assert.equal(starts,2)
  mic.cancel()
 })
+
+test('installed local recognition avoids the remote speech service',async()=>{
+ globalThis.window={speechSynthesis:{},addEventListener(){},isSecureContext:true}
+ let rec
+ class Recognition {
+   constructor(){rec=this}
+   static async available(options){assert.equal(options.processLocally,true);return 'available'}
+   start(){} stop(){} abort(){}
+ }
+ Recognition.prototype.processLocally=false
+ const button=element()
+ const mic=attachMicrophone({button,status:element(),Recognition,onStart(){},onCommand(){},onMessage(){}})
+ await new Promise(resolve=>setImmediate(resolve))
+ button.onclick();assert.equal(rec.processLocally,true);mic.cancel()
+})
+test('insecure pages and speech-service failures explain the actual limitation',()=>{
+ globalThis.window={speechSynthesis:{},addEventListener(){},isSecureContext:false}
+ let rec,starts=0
+ class Recognition{constructor(){rec=this}start(){starts++}stop(){}abort(){}}
+ const messages=[],button=element(),status=element()
+ const mic=attachMicrophone({button,status,Recognition,onStart(){},onCommand(){},onMessage:m=>messages.push(m)})
+ button.onclick();assert.equal(starts,0);assert.match(messages.at(-1),/HTTPS/)
+ window.isSecureContext=true
+ button.onclick();rec.onerror({error:'network'});rec.onend()
+ assert.equal(messages.length,2);assert.match(messages.at(-1),/speech recognition service/)
+ mic.cancel()
+})

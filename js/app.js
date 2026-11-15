@@ -16,11 +16,11 @@ import { SCORE_STEPS, setPalette, regimeColor } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { createListeningPanel } from './sound.js?v=main-voice-7'
+import { createListeningPanel } from './sound.js?v=fresh-start-8'
 import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
 import { wireSearch } from './search.js'
 import { startFlames } from './flames.js'
-import { loadPref, savePref, saveTheme } from './prefs.js'
+import { loadPref, savePref, saveTheme } from './prefs.js?v=fresh-start-8'
 import { initChat } from './chat.js'
 
 const $ = id => document.getElementById(id)
@@ -950,8 +950,12 @@ function describeView() {
 // Start
 // ---------------------------------------------------------------------------
 async function start() {
-  // a shared link (with an area or a panel in it) opens straight on the map; otherwise on Home
-  readAddress()
+  // A reopened or refreshed page always starts at Home, without an old selection.
+  try { history.replaceState(null, '', location.pathname + location.search) } catch {}
+  window.addEventListener('pageshow', event => {
+    // Back/forward cache can restore the entire old page without re-running startup.
+    if (event.persisted) location.reload()
+  })
   document.body.dataset.page = page
 
   setPalette(settings.safeColors ? 'safe' : 'fire')
@@ -980,7 +984,8 @@ async function start() {
     return
   }
 
-  readYears()
+  state.fromYear = data.firstYear
+  state.toYear = data.lastYear
   $('homeStatus').textContent = `NASA satellite hotspot detections for the whole world, ${data.firstYear} to ${data.lastYear}.`
   wireData()
   mapView.buildCells()

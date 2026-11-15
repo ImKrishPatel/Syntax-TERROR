@@ -23,7 +23,13 @@ export function parseVoiceCommand(transcript) {
 
 // One click, one utterance. Speak results only after recognition has ended.
 export function attachMicrophone({button,status,onStart,onCommand,onMessage,Recognition=window.SpeechRecognition || window.webkitSpeechRecognition}) {
-  let active=null, watchdog=null
+  let active=null, watchdog=null, localModelReady=false
+  // Prefer installed on-device recognition when the browser supports it.
+  // Never download a model or change browser settings automatically.
+  if(typeof Recognition?.available === 'function' && 'processLocally' in Recognition.prototype) {
+    Promise.resolve().then(()=>Recognition.available({langs:['en-US'],processLocally:true}))
+      .then(result=>{localModelReady=result==='available'}).catch(()=>{})
+  }
   function reset() {clearTimeout(watchdog);button.setAttribute('aria-pressed','false');button.classList.remove('is-recording')}
   function cancel() { if(active){const rec=active;active=null;rec.abort()} reset() }
   if(!Recognition || !('speechSynthesis' in window)) {
@@ -32,6 +38,10 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
   }
   button.onclick=()=>{
     cancel()
+    if(window.isSecureContext===false) {
+      const message='Speak needs a secure website address. Open the HTTPS website, or use localhost for a local preview.'
+      status.textContent=message;onMessage(message);return
+    }
     try { onStart() } catch(error) {
       console.error('Microphone setup failed:',error)
       status.textContent='Could not start Speak. Refresh the page and try again.'
@@ -40,6 +50,7 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
     }
     const rec=new Recognition();active=rec
     let transcript=null, problem=null, finished=false
+    if(localModelReady) rec.processLocally=true
     rec.lang='en-US';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1
     status.textContent='Requesting microphone. Allow access if your browser asks.'
     button.setAttribute('aria-pressed','true');button.classList.add('is-recording')
@@ -69,7 +80,7 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
       if(active!==rec)return
       if(event.error==='not-allowed' || event.error==='service-not-allowed')problem='Microphone access was not allowed. Allow microphone access in your browser, then try again.'
       else if(event.error==='audio-capture')problem='No microphone was found. Connect a microphone and try again.'
-      else if(event.error==='network')problem='Speech recognition could not connect. Check your internet connection and try again.'
+      else if(event.error==='network')problem='The browser could not reach its speech recognition service. Try this website in Google Chrome. If you are already using Chrome, check whether your network or VPN blocks speech recognition. The regular Listen controls still work.'
       else if(event.error!=='no-speech' && event.error!=='aborted')problem='Speech recognition is unavailable. Please try again.'
       finish()
     }

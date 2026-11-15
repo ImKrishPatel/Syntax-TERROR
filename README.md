@@ -23,7 +23,7 @@ Then open http://localhost:8000 in your browser. Press Ctrl+C in the terminal to
 
 ## What is in the app
 
-- **Home**: search any place (or type coordinates), pick a custom area, and keep favourites.
+- **Home**: search any place (or type coordinates), pick a custom area, and keep favourites during the current visit.
   Dark mode, colours for colour-blind viewers and spoken descriptions are switched on here.
 - **Map**: map, satellite, terrain and a NASA burn view. The hotspot grid sits on top. Click the map
   to pick a place, drag the box to move it, drag a corner to resize it, or Shift + drag to draw one.
@@ -52,7 +52,7 @@ The three lines in the top-left corner hide and show the side menu.
 | `js/map.js` | the map, its backgrounds, the hotspot grid, the area box, the regime layer |
 | `js/search.js` | the place search |
 | `js/flames.js` | the flames behind the Home page |
-| `js/prefs.js` | what the browser remembers (dark mode, favourites) |
+| `js/prefs.js` | current-page preferences; resets on a new visit |
 | `js/calendar.js` | the burning calendar |
 | `js/charts.js` | the line charts |
 | `js/sound.js`, `js/fire-audio.js`, `js/listening-model.js` | the Listen panel |
@@ -163,3 +163,9 @@ How it fits together:
 - `chat.url` in `js/config.js` is the address of that server. Leave it empty to switch the chat off.
 
 **Never put the key in this repo.** It only goes into Cloudflare's secret settings.
+
+### Fresh startup and speech connection handling
+
+Every refresh or newly opened page starts on Home in the light theme, with no selected region, the full year range, the default map style, and colour-blind colours and spoken descriptions off. Preferences and favourites last only for the current page. Old URL selections are ignored on startup, including bookmarked/shared selection links. Browser back/forward cache restores reload the page to reset it too. Existing saved browser storage is not deleted, but is no longer used.
+
+Speak uses an installed English on-device recognition model when the browser exposes it as available; no language pack is downloaded automatically. Otherwise it uses the browser speech service. A network error means that service could not be reached, not that the keyword was invalid. HTTPS (or localhost for development) is required. Actual Windows browser/service availability must be verified on the affected device; automated tests mock these browser APIs.
