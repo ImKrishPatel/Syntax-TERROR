@@ -1,4 +1,4 @@
-/* Ember Atlas
+/* Ember
    A dark "night-side of the planet" look so it sits naturally next to the satellite
    imagery: charcoal-green background, pale ink, magenta for anything the reader has
    marked (the selected area, the selected month). Fire colours are used only for data. */
@@ -538,7 +538,7 @@ code { font-family: inherit; font-weight: 600; overflow-wrap: anywhere; }
 }
 
 
-/* ---------- Ember Atlas additions ---------- */
+/* ---------- Ember additions ---------- */
 
 .brand-name { letter-spacing: 0.01em; }
 

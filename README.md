@@ -1,4 +1,4 @@
-# Syntax TERROR: Ember Atlas
+# Syntax TERROR: Ember
 
 NASA Space Apps Challenge 2026: Harmonization of MODIS and VIIRS Hot Spots.
 
