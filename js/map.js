@@ -288,7 +288,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     const out = smooth.getContext('2d')
     out.clearRect(0, 0, IMG, IMG)
     ctx.globalAlpha = 1
-    out.filter = `blur(${PX * 0.5}px)`   // soft ember glow instead of hard squares or dots
+    out.filter = `blur(${PX * 0.35}px)`   // soft ember glow instead of hard squares or dots
     out.drawImage(paint, 0, 0)
     out.filter = 'none'
 
