@@ -188,8 +188,17 @@ function drawMapPeriod(picked) {
   $('mapYearText').textContent = playingAt || picked || state.mapYear ? period : 'All years'
   const year = playingAt ? playingAt.year : picked ? picked.year : state.mapYear
   // satellite picture for the same period: mid-month of the shown month, or August of a shown year
-  const shownMonth = playingAt ? playingAt.month : picked ? picked.month : 7
-  mapView.setImageryDate(`${year || state.toYear}-${String(shownMonth + 1).padStart(2, '0')}-15`)
+  // with no month chosen: the area's biggest fire month (in the shown year, if one is shown)
+  let showY = year, showM = playingAt ? playingAt.month : picked ? picked.month : null
+  if (showM === null && table) {
+    let best = -1
+    table.years.forEach((y, r) => {
+      if (year && y !== year) return
+      for (let m = 0; m < 12; m++) { const v = table.value[r][m]; if (v > best) { best = v; showY = y; showM = m } }
+    })
+  }
+  if (showM === null) { showY = year || state.toYear; showM = 7 }
+  mapView.setImageryDate(`${showY}-${String(showM + 1).padStart(2, '0')}-15`)
   $('mapYear').value = year ? year - data.firstYear + 1 : 0
 }
 
