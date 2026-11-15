@@ -71,17 +71,19 @@ class LocalTargetGrid:
             raise ValueError("target_crs must use meters on its first two axes.")
         return crs
 
+    def _local_aeqd_definition(self) -> str:
+        return (
+            f"+proj=aeqd +lat_0={self.origin_latitude:.12f} "
+            f"+lon_0={self.origin_longitude:.12f} +datum=WGS84 "
+            "+units=m +no_defs +type=crs"
+        )
+
     @cached_property
     def crs(self) -> CRS:
         """Return the local AEQD CRS or validated user-selected projected CRS."""
         if self.projection_strategy == "custom":
             return self._validate_custom_crs(self.target_crs or "")
-        proj4 = (
-            f"+proj=aeqd +lat_0={self.origin_latitude:.12f} "
-            f"+lon_0={self.origin_longitude:.12f} +datum=WGS84 "
-            "+units=m +no_defs +type=crs"
-        )
-        return CRS.from_proj4(proj4)
+        return CRS.from_proj4(self._local_aeqd_definition())
 
     @cached_property
     def transformer(self) -> Transformer:
@@ -125,6 +127,11 @@ class LocalTargetGrid:
     @property
     def metadata(self) -> Dict[str, object]:
         """Return serializable geometry and indexing metadata."""
+        target_crs = (
+            self._local_aeqd_definition()
+            if self.projection_strategy == "local_aeqd"
+            else self.crs.to_string()
+        )
         return {
             "origin_latitude": self.origin_latitude,
             "origin_longitude": self.origin_longitude,
@@ -133,7 +140,7 @@ class LocalTargetGrid:
             "height": self.height,
             "shape": [self.height, self.width],
             "projection_strategy": self.projection_strategy,
-            "target_crs": self.crs.to_string(),
+            "target_crs": target_crs,
             "bounds_local_m": list(self.bounds_local),
             "row_order": "north_to_south",
             "column_order": "west_to_east",

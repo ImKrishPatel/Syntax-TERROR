@@ -143,6 +143,36 @@ def test_missing_features_are_imputed_and_marked_using_training_data() -> None:
     assert np.isfinite(prediction.probability).all()
 
 
+def test_validation_loss_and_early_stopping_use_validation_parents() -> None:
+    training = tuple(_sample(f"train{index}", index) for index in range(3))
+    validation = tuple(_sample(f"validation{index}", index + 3) for index in range(3))
+    model = ProbabilisticSpatialEnsemble(
+        grid_height=2,
+        grid_width=3,
+        hidden_channels=2,
+        conv_blocks=1,
+        ensemble_size=2,
+        epochs=4,
+        batch_size=2,
+        random_seed=29,
+    ).fit(
+        training,
+        validation_samples=validation,
+        early_stopping_patience=2,
+        device="cpu",
+    )
+
+    assert model.training_device == "cpu"
+    assert model.training_duration_seconds >= 0
+    assert len(model.training_history) == 2
+    assert all(member["train_loss"] for member in model.training_history)
+    assert all(member["validation_loss"] for member in model.training_history)
+    assert all(member["best_epoch"] <= 4 for member in model.training_history)
+    assert set(model.training_sample_ids).isdisjoint(
+        sample.modis_id for sample in validation
+    )
+
+
 def test_prediction_does_not_use_target_values_or_status() -> None:
     samples = tuple(_sample(f"m{index}", index) for index in range(3))
     model = _fit_model(samples)
@@ -252,6 +282,7 @@ def test_spatial_model_save_load_preserves_predictions(tmp_path) -> None:
     assert restored.input_channel_names == model.input_channel_names
     assert restored.training_sample_ids == model.training_sample_ids
     assert restored.member_seeds == model.member_seeds
+    assert restored.training_history == model.training_history
 
 
 def test_fixed_seed_produces_repeatable_ensemble_predictions() -> None:

@@ -37,6 +37,12 @@ def test_default_grid_dimensions_resolution_and_center() -> None:
     assert grid.cell_for_geographic(-120.0, 40.0) == (1, 1)
 
 
+def test_local_aeqd_metadata_preserves_the_crs_definition() -> None:
+    grid = LocalTargetGrid(40.0, -120.0)
+
+    assert grid.metadata["target_crs"] == grid.crs.to_string()
+
+
 def test_grid_dimensions_and_resolution_are_configurable() -> None:
     grid = LocalTargetGrid(
         40.0, -120.0, resolution_m=250.0, width=4, height=2

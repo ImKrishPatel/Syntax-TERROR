@@ -144,3 +144,24 @@ def test_prediction_before_fit_has_clear_error() -> None:
 def test_random_forest_requires_multiple_trees_for_uncertainty() -> None:
     with pytest.raises(ValueError, match="at least two"):
         ProbabilisticRandomForest(n_estimators=1)
+
+
+def test_random_forest_artifact_round_trip_preserves_predictions_and_provenance(
+    tmp_path: Path,
+) -> None:
+    sample, _ = _training_samples()
+    model = ProbabilisticRandomForest(n_estimators=7, random_state=23).fit([sample])
+    expected = model.predict(sample)
+
+    artifact = model.save(tmp_path / "forest.joblib")
+    restored = ProbabilisticRandomForest.load(artifact)
+    actual = restored.predict(sample)
+
+    np.testing.assert_array_equal(actual.probability, expected.probability)
+    np.testing.assert_array_equal(actual.uncertainty_std, expected.uncertainty_std)
+    assert restored.training_sample_ids == model.training_sample_ids
+    assert restored.feature_names == model.feature_names
+    assert restored.training_cell_count == model.training_cell_count
+    assert restored.feature_importances()
+    with pytest.raises(FileExistsError, match="overwrite"):
+        model.save(artifact)
