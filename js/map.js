@@ -92,7 +92,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, worldCopyJump: false })
     L.tileLayer(GIBS + 'BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg', { maxNativeZoom: 8 }).addTo(inset)
     inset.setView([20, 0], 0)
-    insetBox = L.rectangle(map.getBounds(), { color: '#ff3b30', weight: 2, fill: false, interactive: false }).addTo(inset)
+    insetBox = L.rectangle([[0, 0], [1, 1]], { color: '#ff3b30', weight: 2, fill: false, interactive: false }).addTo(inset)
     const sync = () => {
       const b = map.getBounds()
       insetBox.setBounds(b)
@@ -100,7 +100,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     }
     map.on('moveend zoomend', sync)
     if (window.ResizeObserver) new ResizeObserver(() => inset.invalidateSize()).observe(insetEl)
-    setTimeout(sync, 0)
+    map.whenReady(sync)
   }
 
   let places = []
