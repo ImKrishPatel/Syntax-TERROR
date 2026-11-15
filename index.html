@@ -66,6 +66,11 @@
           <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
           <button type="button" data-layer="regimes" aria-pressed="false">Fire regimes</button>
         </div>
+        <div class="basemap-switch segmented" role="group" aria-label="Map style">
+          <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
+          <button type="button" data-basemap="map" aria-pressed="false">Map</button>
+        </div>
+        <p class="map-hint" id="mapHint">Click the map to move the box · Shift + drag to draw a new one · drag a corner to resize</p>
         <div class="legend" id="mapLegend"></div>
         <p class="draw-hint" id="drawHint" hidden>Drag on the map to draw a new area. Press Esc to cancel.</p>
       </div>

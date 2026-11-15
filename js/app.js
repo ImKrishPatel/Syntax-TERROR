@@ -396,6 +396,12 @@ function wireControls() {
   document.querySelectorAll('[data-metric]').forEach(b => { b.onclick = () => update({ metric: b.dataset.metric }) })
   document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => update({ mode: b.dataset.mode }) })
   document.querySelectorAll('[data-layer]').forEach(b => { b.onclick = () => update({ layer: b.dataset.layer }) })
+  document.querySelectorAll('[data-basemap]').forEach(b => {
+    b.onclick = () => {
+      mapView.setBasemap(b.dataset.basemap)
+      document.querySelectorAll('[data-basemap]').forEach(x => x.setAttribute('aria-pressed', String(x === b)))
+    }
+  })
 
   // listen
   const stopListening = () => {
@@ -457,6 +463,7 @@ async function start() {
     onAreaChange: area => update({ area }),
   })
   mapView.loadBasemap()   // not awaited: the map fills in while the data loads
+  mapView.setBasemap('satellite')
 
   try {
     await loadHotspots()

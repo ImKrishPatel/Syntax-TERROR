@@ -25,8 +25,10 @@ export function createMap(element, legendElement, { onAreaChange }) {
     minZoom: 2, maxZoom: 8,
     maxBounds: [[-80, -260], [86, 260]],
     zoomControl: false, attributionControl: false,
+    boxZoom: false,   // Shift + drag draws a new area instead
   })
   L.control.zoom({ position: 'topright' }).addTo(map)
+  L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map)
 
   // Layers are stacked in "panes". Each pane gets its own canvas.
   function makePane(name, zIndex, clickable) {
@@ -35,6 +37,9 @@ export function createMap(element, legendElement, { onAreaChange }) {
     if (!clickable) pane.style.pointerEvents = 'none'
     return L.canvas({ pane: name, padding: 0.4 })
   }
+  map.createPane('imagery').style.zIndex = 150          // satellite photos, under everything
+  const labelPane = map.createPane('imageryLabels')     // satellite place names, over the cells
+  labelPane.style.zIndex = 360; labelPane.style.pointerEvents = 'none'
   const baseCanvas = makePane('base', 200, false)
   const cellCanvas = makePane('cells', 300, true)
   const lineCanvas = makePane('lines', 350, false)   // borders and water are drawn over the cells
@@ -43,6 +48,36 @@ export function createMap(element, legendElement, { onAreaChange }) {
   // -------------------------------------------------------------------------
   // Basemap
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Satellite basemap (Esri World Imagery: free, no key, attribution required)
+  // -------------------------------------------------------------------------
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/'
+  const imagery = L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imagery', maxNativeZoom: 18,
+    attribution: 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  })
+  const imageryLabels = L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imageryLabels', maxNativeZoom: 18,
+  })
+  const vectorBase = L.layerGroup()
+  let basemap = 'map'
+
+  function setBasemap(name) {
+    basemap = name
+    const satellite = name === 'satellite'
+    element.classList.toggle('is-satellite', satellite)
+    if (satellite) {
+      map.removeLayer(vectorBase); map.removeLayer(placeLayer)
+      imagery.addTo(map); imageryLabels.addTo(map)
+    } else {
+      map.removeLayer(imagery); map.removeLayer(imageryLabels)
+      vectorBase.addTo(map); placeLayer.addTo(map)
+    }
+    shade.setStyle(satellite ? { fillColor: '#000', fillOpacity: 0.45 } : { fillColor: PAPER, fillOpacity: 0.62 })
+    if (cellValues) setCells(cellValues, cellMetric, cellPeriod)
+    if (regimeLayer) regimeLayer.setStyle(regimeStyle)
+  }
+
   let places = []
   async function loadBasemap() {
     const world = await (await fetch(CONFIG.files.basemap)).json()
@@ -52,11 +87,11 @@ export function createMap(element, legendElement, { onAreaChange }) {
     const over = { renderer: lineCanvas, interactive: false }
 
     // land goes under the hotspot cells; water and borders go on top of them
-    L.geoJSON(layer('countries'), { ...plain, style: { fillColor: LAND, fillOpacity: 1, stroke: false } }).addTo(map)
-    L.geoJSON(layer('rivers2'), { ...over, style: { color: WATER_LINE, weight: 0.9, fill: false } }).addTo(map)
-    L.geoJSON(layer('lakes'), { ...over, style: { fillColor: WATER, fillOpacity: 1, color: WATER_LINE, weight: 0.6 } }).addTo(map)
-    L.geoJSON(layer('states'), { ...over, style: { color: INK, opacity: 0.5, weight: 0.8, dashArray: '5 3', fill: false } }).addTo(map)
-    L.geoJSON(layer('countries'), { ...over, style: { fill: false, color: INK, opacity: 0.55, weight: 0.9 } }).addTo(map)
+    L.geoJSON(layer('countries'), { ...plain, style: { fillColor: LAND, fillOpacity: 1, stroke: false } }).addTo(vectorBase)
+    L.geoJSON(layer('rivers2'), { ...over, style: { color: WATER_LINE, weight: 0.9, fill: false } }).addTo(vectorBase)
+    L.geoJSON(layer('lakes'), { ...over, style: { fillColor: WATER, fillOpacity: 1, color: WATER_LINE, weight: 0.6 } }).addTo(vectorBase)
+    L.geoJSON(layer('states'), { ...over, style: { color: INK, opacity: 0.5, weight: 0.8, dashArray: '5 3', fill: false } }).addTo(vectorBase)
+    L.geoJSON(layer('countries'), { ...over, style: { fill: false, color: INK, opacity: 0.55, weight: 0.9 } }).addTo(vectorBase)
 
     places = layer('places').features.map(f => ({
       name: f.properties.name, rank: f.properties.scalerank,
@@ -159,7 +194,10 @@ export function createMap(element, legendElement, { onAreaChange }) {
     const breaks = fireBreaks(v)
     cellSquares.forEach((square, i) => {
       const color = fireColor(v[i], breaks)
-      square.setStyle(color ? { fillColor: color, fillOpacity: 0.95, opacity: 1 } : { fillOpacity: 0, opacity: 0 })
+      const sat = basemap === 'satellite'
+      square.setStyle(color
+        ? { fillColor: color, fillOpacity: sat ? 0.78 : 0.95, opacity: sat ? 0 : 1 }
+        : { fillOpacity: 0, opacity: 0 })
     })
     hotspotLegend = { breaks, metric, period }
     drawLegend()
@@ -172,17 +210,11 @@ export function createMap(element, legendElement, { onAreaChange }) {
 
   function setRegimes(geojson) {
     const seen = new Map()
-    regimeLayer = L.geoJSON(geojson, {
-      renderer: cellCanvas,
-      style: f => {
-        const p = f.properties
-        if (!seen.has(p.regime_id)) seen.set(p.regime_id, { name: p.regime_name, color: p.color || '#999' })
-        return {
-          fillColor: p.color || '#999', fillOpacity: 0.9,
-          color: p.shifted ? INK : LAND, weight: p.shifted ? 1.6 : 1,
-        }
-      },
-    })
+    for (const f of geojson.features) {
+      const p = f.properties
+      if (!seen.has(p.regime_id)) seen.set(p.regime_id, { name: p.regime_name, color: p.color || '#999' })
+    }
+    regimeLayer = L.geoJSON(geojson, { renderer: cellCanvas, style: regimeStyle })
     regimeLayer.bindTooltip(layer => {
       const p = layer.feature.properties
       let html = `<b>${p.regime_name}</b>`
@@ -192,6 +224,14 @@ export function createMap(element, legendElement, { onAreaChange }) {
       return html
     }, { sticky: true, className: 'map-tip', direction: 'top', offset: [0, -6] })
     regimeList = [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([, r]) => r)
+  }
+
+  function regimeStyle(f) {
+    const p = f.properties
+    if (basemap === 'satellite') {
+      return { fillColor: p.color || '#999', fillOpacity: 0.72, color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0 }
+    }
+    return { fillColor: p.color || '#999', fillOpacity: 0.9, color: p.shifted ? INK : LAND, weight: p.shifted ? 1.6 : 1 }
   }
 
   function showLayer(name) {
@@ -209,7 +249,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
     if (showing === 'regimes' && regimeLayer) {
       legendElement.innerHTML = '<p class="legend-title">Fire regime of each cell</p>' +
         regimeList.map(r => `<p class="legend-row"><i style="background:${r.color}"></i>${r.name}</p>`).join('') +
-        '<p class="legend-row"><i class="shifted"></i>Dark outline: regime changed over time</p>'
+        `<p class="legend-row"><i class="shifted"></i>${basemap === 'satellite' ? 'White' : 'Dark'} outline: regime changed over time</p>`
       return
     }
     if (!hotspotLegend) return
@@ -234,9 +274,9 @@ export function createMap(element, legendElement, { onAreaChange }) {
   const box = L.rectangle([[0, 0], [1, 1]], {
     renderer: areaCanvas, interactive: false, fill: false, color: MAGENTA, weight: 2,
   }).addTo(map)
-  const handleIcon = L.divIcon({ className: 'area-handle', iconSize: [14, 14] })
+  const handleIcon = L.divIcon({ className: 'area-handle', iconSize: [20, 20] })
   const handles = [0, 1, 2, 3].map(i => {
-    const handle = L.marker([0, 0], { icon: handleIcon, draggable: true, title: 'Drag to resize the area', zIndexOffset: 500 }).addTo(map)
+    const handle = L.marker([0, 0], { icon: handleIcon, draggable: true, bubblingMouseEvents: false, title: 'Drag to resize the area', zIndexOffset: 500 }).addTo(map)
     handle.on('drag', () => {
       const p = handle.getLatLng()
       const opposite = handles[(i + 2) % 4].getLatLng()
@@ -277,7 +317,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
   }
 
   // "Draw on map": drag out a new box with the mouse
-  let drawing = false, drawStart = null
+  let drawing = false, drawStart = null, drawStartFromEvent = () => {}
   function startDrawing(onFinish) {
     drawing = true
     map.dragging.disable()
@@ -291,6 +331,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
       onFinish()
     }
     const down = e => { drawStart = e.latlng }
+    drawStartFromEvent = ev => { drawStart = map.mouseEventToLatLng(ev) }
     const move = e => {
       if (drawStart) drawArea(tidyArea([drawStart.lat, drawStart.lng, e.latlng.lat, e.latlng.lng]))
     }
@@ -309,12 +350,33 @@ export function createMap(element, legendElement, { onAreaChange }) {
     return cancel
   }
 
+  // Click anywhere on the map: move the box there, keeping its size
+  map.on('click', e => {
+    if (drawing || !area) return
+    const [s, w, n, e2] = area
+    const halfLat = (n - s) / 2, halfLon = (e2 - w) / 2
+    const lat = Math.min(89 - halfLat, Math.max(-89 + halfLat, e.latlng.lat))
+    const lon = Math.min(180 - halfLon, Math.max(-180 + halfLon, e.latlng.lng))
+    const next = tidyArea([lat - halfLat, lon - halfLon, lat + halfLat, lon + halfLon])
+    drawArea(next)
+    onAreaChange(next)
+  })
+
+  // Shift + drag: draw a new box without pressing "Draw on map" first.
+  // Runs before Leaflet's own handler so the map doesn't pan.
+  element.addEventListener('mousedown', ev => {
+    if (!ev.shiftKey || drawing || ev.button !== 0) return
+    ev.stopPropagation()
+    startDrawing(() => {})
+    drawStartFromEvent(ev)
+  }, true)
+
   // -------------------------------------------------------------------------
   map.setView([56, -114], 4.5)
   drawGraticule()
 
   return {
-    map, loadBasemap, buildCells, setCells, setRegimes, showLayer,
+    map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setBasemap,
     setArea, fitArea, startDrawing,
     isDrawing: () => drawing,
     hasRegimes: () => !!regimeLayer,
