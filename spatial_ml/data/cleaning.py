@@ -17,6 +17,7 @@ _DUPLICATE_KEY = (
     "instrument",
 )
 _CONFIDENCE_LABELS = {"l", "n", "h", "low", "nominal", "high"}
+_SOURCE_DUPLICATE_KEY = ("sensor", "source_record_fingerprint")
 
 
 def _confidence_is_valid(value: object) -> bool:
@@ -50,6 +51,14 @@ def _require_schema(records: pd.DataFrame) -> None:
             "Expected normalized FIRMS records; missing columns: "
             + ", ".join(missing)
         )
+
+
+def _duplicate_columns(records: pd.DataFrame) -> List[str]:
+    if "source_record_fingerprint" in records:
+        return [
+            column for column in _SOURCE_DUPLICATE_KEY if column in records
+        ]
+    return [column for column in _DUPLICATE_KEY if column in records]
 
 
 def clean_firms_records(records: pd.DataFrame) -> pd.DataFrame:
@@ -106,7 +115,8 @@ def clean_firms_records(records: pd.DataFrame) -> pd.DataFrame:
         )
 
     confidence_valid = cleaned["confidence"].map(_confidence_is_valid)
-    cleaned["confidence_valid"] = confidence_valid.astype(bool)
+    confidence_valid = confidence_valid.astype(bool)
+    cleaned["confidence_valid"] = confidence_valid
     invalid_confidence_count = int((~confidence_valid).sum())
     if invalid_confidence_count:
         _LOGGER.info(
@@ -114,7 +124,7 @@ def clean_firms_records(records: pd.DataFrame) -> pd.DataFrame:
             invalid_confidence_count,
         )
 
-    duplicate_columns = [column for column in _DUPLICATE_KEY if column in cleaned]
+    duplicate_columns = _duplicate_columns(cleaned)
     duplicate_count = int(cleaned.duplicated(subset=duplicate_columns).sum())
     cleaned = cleaned.drop_duplicates(subset=duplicate_columns, keep="first")
     if duplicate_count:
@@ -124,7 +134,7 @@ def clean_firms_records(records: pd.DataFrame) -> pd.DataFrame:
 
 
 def _duplicate_count(records: pd.DataFrame) -> int:
-    columns = [column for column in _DUPLICATE_KEY if column in records]
+    columns = _duplicate_columns(records)
     if not columns:
         return 0
     return int(records.duplicated(subset=columns).sum())

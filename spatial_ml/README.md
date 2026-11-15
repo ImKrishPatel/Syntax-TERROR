@@ -193,10 +193,82 @@ does not download data. File hashes establish input identity, not NASA
 provenance or data quality.
 
 Synthetic fixtures support software tests only and are not scientific evidence
-or model-performance results. This checkout currently contains no real local
-FIRMS observations, so no real-data model comparison, calibration, or
-validation has been performed. The evaluation workflow does not produce
-historical estimates.
+or model-performance results. The generic `run_local` command is intended for
+small CSV inputs and does not attest that user-supplied files are authentic
+NASA observations. Use the real-archive workflow below for the chunked
+M2-to-M4 path and its provenance manifest. No conclusions about model
+performance should be drawn until real held-out evaluations have completed.
+The evaluation workflow does not produce historical estimates.
+
+### Real FIRMS archive processing and M7 training
+
+`spatial_ml.pipeline.real_data` accepts the local MODIS Collection 6.1 and
+Suomi-NPP VIIRS Collection 2 ZIP archives. It reads CSV members from ZIP
+archives in chunks, writes normalized compressed intermediates, combines
+annual boundary dates by source-row fingerprint, then runs the existing M3
+matcher one acquisition date at a time. Monthly compressed M3 candidate and
+pair tables and pickle-free M4 sample shards are written with provenance and
+processing manifests. The original ZIP files are not changed. Outputs are
+resumable by completed month; a partial normalized M2 run is not silently
+overwritten.
+
+Example (substitute local archive paths; no data are downloaded):
+
+```bash
+python -m spatial_ml.pipeline.real_data \
+  --archives /local/path/DL_FIRE_M-C61_849514.zip \
+    /local/path/DL_FIRE_SV-C2_849515.zip \
+    /local/path/DL_FIRE_M-C61_849541.zip \
+    /local/path/DL_FIRE_SV-C2_849542.zip \
+    /local/path/DL_FIRE_M-C61_849531.zip \
+    /local/path/DL_FIRE_SV-C2_849532.zip \
+    /local/path/DL_FIRE_M-C61_849545.zip \
+    /local/path/DL_FIRE_SV-C2_849546.zip \
+    /local/path/DL_FIRE_M-C61_849584.zip \
+    /local/path/DL_FIRE_SV-C2_849585.zip \
+  --processed-dir data/processed/firms_real_2016_2021 \
+  --output-dir data/overlap/real_2016_2021 \
+  --chunk-size 100000
+```
+
+The M7 real-data runner samples M4 parent samples without replacement,
+stratified by calendar year (default maximum 10,000 parents per year), and
+records the eligible and selected counts plus input-shard hashes. By default
+it requests temporal, spatial-block, and combined held-out evaluations. The
+temporal split trains through 2018, validates on 2019, and tests on 2020–2021;
+spatial and combined splits use 500 km equal-area blocks. These are explicit
+evaluation configurations, not scientific matching thresholds. Unavailable
+splits are reported rather than weakened.
+
+```bash
+python -m spatial_ml.evaluation.train_real \
+  --sample-dir data/overlap/real_2016_2021/samples \
+  --results-dir results/real_m7_2016_2021 \
+  --models-dir models/real_2016_2021
+```
+
+M5 and M6 are trained on the same training parents, with training-only
+preprocessing. Calibration is fit on validation predictions; model comparison
+and reported performance use held-out parents. This runner does not attest
+NASA authenticity merely from file paths. Its M4 sampling frame contains
+MODIS parents with positive in-grid observed VIIRS candidate evidence; it
+does not convert unmatched parents to negative labels. Results therefore
+describe that eligible sample population, not all MODIS observations.
+Environmental raster channels are currently unavailable when no local rasters
+are supplied. Treat these runs as preliminary evaluation until provenance,
+sampling representativeness, split coverage, and environmental limitations
+have been reviewed.
+
+The ten local annual archives currently available cover **2016-11-14 through
+2021-11-14**, not the full requested team period through 2026-07-31. The M2
+audit counted 124,276,227 source rows and retained 124,060,012 after removing
+216,215 exact source-row fingerprint duplicates, including genuine repeats
+across shared annual boundary dates. It found no invalid coordinates or
+timestamps and no empty source fields. Four invalid FRP values were flagged
+and normalized to missing without dropping their observation rows. Terra and
+Aqua MODIS detections are both present; the VIIRS archives identify SNPP.
+MODIS confidence remains numeric while VIIRS confidence remains categorical
+(`l`/`n`/`h`).
 
 ## Historical MODIS 2000–2011 estimation
 
@@ -471,8 +543,10 @@ fire dataset, reconstructed VIIRS, or historical 375 m VIIRS observations.
 
 ## FIRMS ingestion and cleaning
 
-The ingestion layer accepts local CSV files only; it does not download NASA
-data.
+The standard `load_modis(path)` and `load_viirs(path)` functions continue to
+accept local CSV files and return DataFrames. They do not download NASA data.
+For large FIRMS ZIP archives, `spatial_ml.data.archive_ingest` streams the
+single CSV member in bounded chunks without extracting it.
 
 - Expected MODIS input: a FIRMS CSV with latitude/longitude, acquisition date
   and time, and available satellite, instrument, confidence, FRP, and day/night
@@ -485,18 +559,72 @@ data.
 - The normalized schema includes `latitude`, `longitude`, `date`, `time`,
   `datetime`, `sensor`, `satellite`, `instrument`, `confidence`, `frp`, and
   `daynight`. Unrecognized source columns are retained.
+- `iter_firms_zip_chunks(path, chunksize=100_000)` yields that normalized
+  schema plus `source_archive`, `source_file`, `source_row_number`, and a
+  deterministic 128-bit source-row fingerprint. The fingerprint is derived
+  from all original source columns; it is not a NASA source identifier.
+  Brightness, scan, track, product version, and type remain available.
+- The archive CLI can audit many archives and optionally write one cleaned,
+  gzip-compressed normalized CSV per archive. It records quality summaries in
+  JSON, refuses to overwrite an existing report or processed file, and never
+  extracts or modifies the ZIPs. These processed files are in the ignored
+  `data/processed/` tree.
+
+For example, to audit and normalize the five matching MODIS/SNPP VIIRS archive
+pairs, keeping the Desktop ZIPs unchanged:
+
+```bash
+python -m spatial_ml.data.archive_ingest \
+  --archives \
+  ~/Desktop/DL_FIRE_M-C61_849514.zip \
+  ~/Desktop/DL_FIRE_SV-C2_849515.zip \
+  ~/Desktop/DL_FIRE_M-C61_849541.zip \
+  ~/Desktop/DL_FIRE_SV-C2_849542.zip \
+  ~/Desktop/DL_FIRE_M-C61_849531.zip \
+  ~/Desktop/DL_FIRE_SV-C2_849532.zip \
+  ~/Desktop/DL_FIRE_M-C61_849545.zip \
+  ~/Desktop/DL_FIRE_SV-C2_849546.zip \
+  ~/Desktop/DL_FIRE_M-C61_849584.zip \
+  ~/Desktop/DL_FIRE_SV-C2_849585.zip \
+  --chunk-size 100000 \
+  --report results/firms_archive_audit_rerun.json
+```
+
+Omit `--processed-output-dir` to audit/normalize in memory without saving
+intermediate data. Add that option only when cleaned per-archive gzip
+intermediates are needed. To use a different report or output location, pass
+those paths explicitly. An existing output requires review and a new
+destination; the CLI will not replace it.
+
+The Desktop archive audit found 124,276,227 rows in the ten supplied archives;
+124,060,012 remained after exact source-row
+fingerprint duplicate handling. All archive date ranges matched their stated
+inclusive periods, with 366 or 367 distinct dates and monotonic acquisition
+date order. No invalid coordinates, dates/times, FRP/confidence values, or
+missing values in the supplied source fields were found. The 216,215 duplicate
+fingerprints occurred on adjacent archive boundaries; no records were removed
+merely for sharing coordinates and timestamps. MODIS confidence remained
+numeric (0–100); VIIRS confidence remained categorical (`l`, `n`, `h`). The
+latest available date is 2021-11-14, not the requested team coverage end of
+2026-07-31. Per-archive counts and distributions are in
+`results/firms_archive_audit.json`. The ZIPs remain on the Desktop; no large
+normalized intermediate was persisted by this audit.
+
 - Date/time values are parsed into a date, an HHMM time string, and a datetime.
   Midnight and leading-zero acquisition times are supported. Missing or
   malformed timestamps remain missing during normalization and are excluded
   by cleaning with an informational log message.
 - Cleaning removes rows with missing/out-of-range coordinates and rows with
-  missing or malformed datetimes. Duplicate observations are identified by
-  sensor, coordinates, datetime, satellite, and instrument; only later exact
-  matches on those identifying fields are removed.
+  missing or malformed datetimes. Archive duplicates use the source-row
+  fingerprint, so records sharing coordinates and timestamps but differing in
+  other reported source values remain distinct. Non-archive DataFrames without
+  fingerprints retain the legacy identifying-field duplicate behavior.
 - Missing, non-numeric, non-finite, or negative FRP is represented as missing;
   those records are retained. The source confidence value is preserved; values
   outside the supported numeric range or known categorical labels are flagged
-  in `confidence_valid`, not filtered. No confidence threshold is applied.
+  in `confidence_valid`, not filtered. MODIS numeric confidence is not
+  substituted for VIIRS categorical confidence. No confidence threshold is
+  applied.
 - `quality_control_summary(raw, cleaned)` returns counts, retained percentage,
   coordinate/date ranges, missing and invalid FRP/confidence counts, duplicate
   count, sensor, satellites, and day/night counts.

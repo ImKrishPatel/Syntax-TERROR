@@ -1,10 +1,14 @@
 """Probabilistic Random Forest baseline for fine-scale VIIRS point evidence."""
 
 import logging
+import os
 import math
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
+import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -15,6 +19,7 @@ from spatial_ml.data.samples import SpatialFeatureInput, TrainingSample
 FeatureInput = TrainingSample | SpatialFeatureInput
 
 LOGGER = logging.getLogger(__name__)
+MODEL_VERSION = "1.0.0"
 
 _BASE_FEATURE_NAMES = (
     "modis_frp",
@@ -174,6 +179,7 @@ class ProbabilisticRandomForest:
         self._pipeline: Optional[Pipeline] = None
         self.feature_names: Tuple[str, ...] = ()
         self.training_sample_ids: Tuple[str, ...] = ()
+        self.training_parent_metadata: Tuple[Dict[str, object], ...] = ()
         self.excluded_sample_ids: Tuple[str, ...] = ()
         self.training_cell_count = 0
 
@@ -265,9 +271,109 @@ class ProbabilisticRandomForest:
         self._pipeline = pipeline
         self.feature_names = feature_names or ()
         self.training_sample_ids = tuple(sample.modis_id for sample in included)
+        self.training_parent_metadata = tuple(
+            {
+                name: sample.metadata.get(name)
+                for name in (
+                    "modis_id",
+                    "observation_datetime",
+                    "modis_latitude",
+                    "modis_longitude",
+                    "modis_source_archive",
+                    "modis_source_file",
+                    "modis_source_row_number",
+                    "modis_source_record_fingerprint",
+                )
+            }
+            for sample in included
+        )
         self.excluded_sample_ids = tuple(excluded_ids)
         self.training_cell_count = int(target.size)
         return self
+
+    def feature_importances(self) -> Dict[str, float]:
+        """Return classifier impurity importances using imputed feature names."""
+        if self._pipeline is None:
+            raise RuntimeError("The Random Forest must be fitted before inspection.")
+        imputer = self._pipeline.named_steps["imputer"]
+        classifier = self._pipeline.named_steps["classifier"]
+        names = imputer.get_feature_names_out(self.feature_names)
+        return {
+            str(name): float(importance)
+            for name, importance in zip(names, classifier.feature_importances_)
+        }
+
+    def save(self, path: str | Path) -> Path:
+        """Persist the fitted sklearn pipeline and its parent-sample provenance."""
+        if self._pipeline is None:
+            raise RuntimeError("The Random Forest must be fitted before saving.")
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            raise FileExistsError(f"Refusing to overwrite model artifact: {destination}")
+        payload = {
+            "artifact_type": "spatial_ml_probabilistic_random_forest",
+            "model_version": MODEL_VERSION,
+            "configuration": {
+                "n_estimators": self.n_estimators,
+                "random_state": self.random_state,
+                "max_depth": self.max_depth,
+            },
+            "feature_names": list(self.feature_names),
+            "training_sample_ids": list(self.training_sample_ids),
+            "training_parent_metadata": list(self.training_parent_metadata),
+            "excluded_sample_ids": list(self.excluded_sample_ids),
+            "training_cell_count": self.training_cell_count,
+            "pipeline": self._pipeline,
+        }
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+        try:
+            joblib.dump(payload, temporary, compress=3)
+            os.link(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return destination
+
+    @classmethod
+    def load(cls, path: str | Path) -> "ProbabilisticRandomForest":
+        """Load a trusted project-generated Random Forest artifact."""
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Random Forest artifact does not exist: {source}")
+        payload = joblib.load(source)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("artifact_type")
+            != "spatial_ml_probabilistic_random_forest"
+            or payload.get("model_version") != MODEL_VERSION
+        ):
+            raise ValueError("Unsupported Random Forest artifact format.")
+        configuration = payload.get("configuration")
+        if not isinstance(configuration, dict):
+            raise ValueError("Random Forest artifact configuration is invalid.")
+        model = cls(**configuration)
+        pipeline = payload.get("pipeline")
+        if not isinstance(pipeline, Pipeline):
+            raise ValueError("Random Forest artifact pipeline is invalid.")
+        model._pipeline = pipeline
+        model.feature_names = tuple(str(name) for name in payload["feature_names"])
+        model.training_sample_ids = tuple(
+            str(value) for value in payload["training_sample_ids"]
+        )
+        model.training_parent_metadata = tuple(
+            dict(value) for value in payload.get("training_parent_metadata", ())
+        )
+        model.excluded_sample_ids = tuple(
+            str(value) for value in payload["excluded_sample_ids"]
+        )
+        model.training_cell_count = int(payload["training_cell_count"])
+        return model
 
     def predict(self, sample: FeatureInput) -> SpatialProbabilityEstimate:
         """Predict cell probabilities and per-cell tree-to-tree spread."""

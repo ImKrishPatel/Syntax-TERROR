@@ -166,6 +166,33 @@ def test_overlap_output_is_deterministic() -> None:
     pd.testing.assert_frame_equal(first_candidates, second_candidates)
 
 
+def test_overlap_outputs_preserve_archive_row_provenance() -> None:
+    modis, viirs = _load_synthetic_overlap()
+    modis["source_archive"] = "modis.zip"
+    modis["source_file"] = "modis.csv"
+    modis["source_row_number"] = range(2, len(modis) + 2)
+    modis["source_record_fingerprint"] = [
+        f"modis-{index}" for index in range(len(modis))
+    ]
+    viirs["source_archive"] = "viirs.zip"
+    viirs["source_file"] = "viirs.csv"
+    viirs["source_row_number"] = range(2, len(viirs) + 2)
+    viirs["source_record_fingerprint"] = [
+        f"viirs-{index}" for index in range(len(viirs))
+    ]
+
+    pairs, candidates = generate_overlap_dataset(modis, viirs)
+
+    matched_pair = pairs.loc[pairs["match_valid"]].iloc[0]
+    matched_candidate = candidates.iloc[0]
+    assert matched_pair["modis_source_archive"] == "modis.zip"
+    assert matched_pair["viirs_source_archive"] == "viirs.zip"
+    assert matched_pair["modis_source_row_number"] >= 2
+    assert matched_pair["viirs_source_record_fingerprint"].startswith("viirs-")
+    assert matched_candidate["modis_source_file"] == "modis.csv"
+    assert matched_candidate["viirs_source_file"] == "viirs.csv"
+
+
 def test_overlap_tables_can_be_saved_explicitly(tmp_path: Path) -> None:
     modis, viirs = _load_synthetic_overlap()
     pairs, candidates = generate_overlap_dataset(modis, viirs)

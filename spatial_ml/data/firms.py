@@ -96,6 +96,16 @@ def _parse_date(value: object) -> pd.Timestamp:
     return parsed.normalize()
 
 
+def _parse_date_series(values: pd.Series) -> pd.Series:
+    parsed = pd.to_datetime(values, format="%Y-%m-%d", errors="coerce")
+    unresolved = values.notna() & parsed.isna()
+    if unresolved.any():
+        parsed.loc[unresolved] = values.loc[unresolved].map(_parse_date)
+    if parsed.dt.tz is not None:
+        parsed = parsed.dt.tz_convert("UTC").dt.tz_localize(None)
+    return parsed.dt.normalize()
+
+
 def _parse_time(value: object) -> Optional[str]:
     if value is None or pd.isna(value):
         return None
@@ -127,6 +137,22 @@ def _parse_time(value: object) -> Optional[str]:
     return f"{hour:02d}{minute:02d}"
 
 
+def _parse_time_series(values: pd.Series) -> pd.Series:
+    text = values.astype("string").str.strip()
+    numeric = text.str.fullmatch(r"\d{1,4}(?:\.0)?", na=False)
+    digits = text.loc[numeric].str.replace(r"\.0$", "", regex=True).str.zfill(4)
+    hours = pd.to_numeric(digits.str[:2], errors="coerce")
+    minutes = pd.to_numeric(digits.str[2:], errors="coerce")
+    valid_numeric = hours.le(23) & minutes.le(59)
+    parsed = pd.Series(pd.NA, index=values.index, dtype="object")
+    parsed.loc[digits.index[valid_numeric]] = digits.loc[valid_numeric]
+
+    fallback = values.loc[text.notna() & ~numeric]
+    if not fallback.empty:
+        parsed.loc[fallback.index] = fallback.map(_parse_time)
+    return parsed
+
+
 def _parse_datetime(value: object) -> pd.Timestamp:
     if value is None or pd.isna(value):
         return pd.NaT
@@ -149,9 +175,16 @@ def normalize_firms_schema(frame: pd.DataFrame, sensor: str) -> pd.DataFrame:
     for canonical, aliases in _COLUMN_ALIASES.items():
         result[canonical] = _column_series(frame, aliases)
 
-    direct_datetimes = result["datetime"].map(_parse_datetime)
-    source_dates = result["date"].map(_parse_date)
-    source_times = result["time"].map(_parse_time)
+    direct_datetimes = pd.to_datetime(
+        result["datetime"], errors="coerce", utc=True
+    ).dt.tz_localize(None)
+    unresolved_datetimes = result["datetime"].notna() & direct_datetimes.isna()
+    if unresolved_datetimes.any():
+        direct_datetimes.loc[unresolved_datetimes] = result.loc[
+            unresolved_datetimes, "datetime"
+        ].map(_parse_datetime)
+    source_dates = _parse_date_series(result["date"])
+    source_times = _parse_time_series(result["time"])
 
     missing_dates = source_dates.isna()
     source_dates.loc[missing_dates] = direct_datetimes.loc[missing_dates].map(
@@ -162,35 +195,27 @@ def normalize_firms_schema(frame: pd.DataFrame, sensor: str) -> pd.DataFrame:
         lambda value: value.strftime("%H%M") if pd.notna(value) else None
     )
 
-    normalized_datetimes = []
-    for position, (parsed_date, parsed_time, direct_datetime) in enumerate(
-        zip(source_dates, source_times, direct_datetimes)
-    ):
-        if (
-            pd.notna(parsed_date)
-            and parsed_time is not None
-            and not pd.isna(parsed_time)
-        ):
-            normalized_datetimes.append(
-                pd.Timestamp(
-                    datetime.combine(
-                        parsed_date.date(),
-                        datetime.strptime(parsed_time, "%H%M").time(),
-                    )
-                )
-            )
-        elif pd.isna(result["date"].iloc[position]) and pd.isna(
-            result["time"].iloc[position]
-        ):
-            normalized_datetimes.append(direct_datetime)
-        else:
-            normalized_datetimes.append(pd.NaT)
+    has_date_and_time = source_dates.notna() & source_times.notna()
+    normalized_datetimes = pd.Series(
+        pd.NaT, index=result.index, dtype="datetime64[ns]"
+    )
+    if has_date_and_time.any():
+        date_time_strings = (
+            source_dates.loc[has_date_and_time].dt.strftime("%Y-%m-%d")
+            + " "
+            + source_times.loc[has_date_and_time].astype(str)
+        )
+        normalized_datetimes.loc[has_date_and_time] = pd.to_datetime(
+            date_time_strings,
+            format="%Y-%m-%d %H%M",
+            errors="coerce",
+        )
 
     result["latitude"] = pd.to_numeric(result["latitude"], errors="coerce")
     result["longitude"] = pd.to_numeric(result["longitude"], errors="coerce")
     result["date"] = source_dates
     result["time"] = pd.Series(source_times, index=result.index, dtype="object")
-    result["datetime"] = pd.to_datetime(normalized_datetimes, errors="coerce")
+    result["datetime"] = normalized_datetimes
     result["sensor"] = normalized_sensor
 
     for column in _STANDARD_COLUMNS:

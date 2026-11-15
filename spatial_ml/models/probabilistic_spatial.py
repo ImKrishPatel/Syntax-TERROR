@@ -3,6 +3,7 @@
 import logging
 import math
 import secrets
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Sequence, Tuple
@@ -257,6 +258,10 @@ class ProbabilisticSpatialEnsemble:
         self.member_seeds: Tuple[int, ...] = ()
         self.positive_class_weight: Optional[float] = None
         self.artifact_preprocessing_version = PREPROCESSING_VERSION
+        self.training_history: Tuple[Dict[str, object], ...] = ()
+        self.training_device = "cpu"
+        self.training_duration_seconds = 0.0
+        self._device = torch.device("cpu")
 
     def _new_network(self, input_channels: int) -> _SmallSpatialNetwork:
         return _SmallSpatialNetwork(
@@ -268,9 +273,32 @@ class ProbabilisticSpatialEnsemble:
         )
 
     def fit(
-        self, samples: Iterable[TrainingSample]
+        self,
+        samples: Iterable[TrainingSample],
+        *,
+        validation_samples: Optional[Iterable[TrainingSample]] = None,
+        early_stopping_patience: Optional[int] = None,
+        device: Optional[str] = None,
     ) -> "ProbabilisticSpatialEnsemble":
         """Fit preprocessing and ensemble members using training samples only."""
+        started = time.perf_counter()
+        if early_stopping_patience is not None and (
+            isinstance(early_stopping_patience, bool)
+            or not isinstance(early_stopping_patience, int)
+            or early_stopping_patience < 1
+        ):
+            raise ValueError("early_stopping_patience must be a positive integer.")
+        if device is None or device == "auto":
+            selected_device = torch.device(
+                "mps" if torch.backends.mps.is_available() else "cpu"
+            )
+        else:
+            selected_device = torch.device(device)
+            if selected_device.type == "mps" and not torch.backends.mps.is_available():
+                raise ValueError("MPS device was requested but is unavailable.")
+            if selected_device.type == "cuda" and not torch.cuda.is_available():
+                raise ValueError("CUDA device was requested but is unavailable.")
+
         sample_list = list(samples)
         if not sample_list:
             raise ValueError("At least one training sample is required.")
@@ -317,6 +345,23 @@ class ProbabilisticSpatialEnsemble:
             raise ValueError(
                 "No training samples contain in-grid observed VIIRS point evidence."
             )
+
+        validation_list = list(validation_samples or ())
+        if any(
+            sample.metadata.get("target_data_status") != "observed"
+            or sample.metadata.get("target_representation")
+            != "binary_viirs_point_observation_occupancy"
+            or sample.target_grid.shape != (self.grid_height, self.grid_width)
+            for sample in validation_list
+        ):
+            raise ValueError(
+                "Validation samples must have observed binary VIIRS targets "
+                "with the configured grid shape."
+            )
+        training_ids = {sample.modis_id for sample in included}
+        validation_ids = {sample.modis_id for sample in validation_list}
+        if training_ids & validation_ids:
+            raise ValueError("Training and validation parent IDs must be disjoint.")
 
         expected_environment_names = included[0].environmental_feature_names
         matrices = []
@@ -366,6 +411,43 @@ class ProbabilisticSpatialEnsemble:
             target_values.reshape(-1, 1, self.grid_height, self.grid_width)
         ).to(torch.float32)
         dataset = TensorDataset(inputs, targets_tensor)
+        validation_dataset = None
+        if validation_list:
+            validation_matrices = []
+            validation_targets = []
+            for sample in validation_list:
+                if sample.environmental_feature_names != expected_environment_names:
+                    raise ValueError(
+                        "Validation samples must use the training environmental "
+                        "features in the same order."
+                    )
+                matrix, names = sample_to_cell_feature_matrix(sample)
+                if names != feature_names:
+                    raise ValueError(
+                        "Validation feature schema does not match training."
+                    )
+                channel_last = preprocessing.transform(matrix).reshape(
+                    self.grid_height,
+                    self.grid_width,
+                    len(input_channel_names),
+                )
+                validation_matrices.append(
+                    np.ascontiguousarray(channel_last.transpose(2, 0, 1))
+                )
+                validation_targets.append(
+                    sample.target_grid.reshape(
+                        1, self.grid_height, self.grid_width
+                    ).astype(np.float32)
+                )
+            validation_inputs = torch.from_numpy(
+                np.stack(validation_matrices)
+            ).to(torch.float32)
+            validation_target_tensor = torch.from_numpy(
+                np.stack(validation_targets)
+            ).to(torch.float32)
+            validation_dataset = TensorDataset(
+                validation_inputs, validation_target_tensor
+            )
         positive_weight = torch.tensor(
             [negative_count / positive_count], dtype=torch.float32
         )
@@ -381,6 +463,7 @@ class ProbabilisticSpatialEnsemble:
             )
 
         members = []
+        training_history = []
         for member_seed in member_seeds:
             generator = torch.Generator(device="cpu")
             generator.manual_seed(member_seed)
@@ -393,21 +476,103 @@ class ProbabilisticSpatialEnsemble:
             )
             with torch.random.fork_rng(devices=[]):
                 torch.manual_seed(member_seed)
-                network = self._new_network(len(input_channel_names))
+                network = self._new_network(len(input_channel_names)).to(
+                    selected_device
+                )
                 optimizer = torch.optim.Adam(
                     network.parameters(), lr=self.learning_rate
                 )
                 loss_function = nn.BCEWithLogitsLoss(
-                    pos_weight=positive_weight
+                    pos_weight=positive_weight.to(selected_device)
                 )
-                network.train()
-                for _ in range(self.epochs):
+                validation_loader = (
+                    DataLoader(
+                        validation_dataset,
+                        batch_size=min(self.batch_size, len(validation_dataset)),
+                        shuffle=False,
+                        num_workers=0,
+                    )
+                    if validation_dataset is not None
+                    else None
+                )
+                unweighted_loss = nn.BCEWithLogitsLoss()
+                member_history: Dict[str, object] = {
+                    "member_seed": member_seed,
+                    "train_loss": [],
+                    "validation_loss": [],
+                }
+                best_loss = math.inf
+                best_state = None
+                best_epoch = 0
+                stale_epochs = 0
+                for epoch in range(self.epochs):
                     for batch_inputs, batch_targets in loader:
+                        batch_inputs = batch_inputs.to(selected_device)
+                        batch_targets = batch_targets.to(selected_device)
                         optimizer.zero_grad(set_to_none=True)
                         logits = network.forward_logits(batch_inputs)
                         loss = loss_function(logits, batch_targets)
                         loss.backward()
                         optimizer.step()
+                    network.eval()
+                    train_loss_sum = 0.0
+                    train_cell_count = 0
+                    with torch.no_grad():
+                        for batch_inputs, batch_targets in loader:
+                            batch_inputs = batch_inputs.to(selected_device)
+                            batch_targets = batch_targets.to(selected_device)
+                            batch_loss = loss_function(
+                                network.forward_logits(batch_inputs), batch_targets
+                            )
+                            count = batch_targets.numel()
+                            train_loss_sum += float(batch_loss.item()) * count
+                            train_cell_count += count
+                    member_history["train_loss"].append(
+                        train_loss_sum / train_cell_count
+                    )
+
+                    if validation_loader is not None:
+                        validation_loss_sum = 0.0
+                        validation_cell_count = 0
+                        with torch.no_grad():
+                            for batch_inputs, batch_targets in validation_loader:
+                                batch_inputs = batch_inputs.to(selected_device)
+                                batch_targets = batch_targets.to(selected_device)
+                                batch_loss = unweighted_loss(
+                                    network.forward_logits(batch_inputs),
+                                    batch_targets,
+                                )
+                                count = batch_targets.numel()
+                                validation_loss_sum += float(batch_loss.item()) * count
+                                validation_cell_count += count
+                        epoch_validation_loss = (
+                            validation_loss_sum / validation_cell_count
+                        )
+                        member_history["validation_loss"].append(
+                            epoch_validation_loss
+                        )
+                        if epoch_validation_loss < best_loss:
+                            best_loss = epoch_validation_loss
+                            best_epoch = epoch + 1
+                            best_state = {
+                                name: value.detach().cpu().clone()
+                                for name, value in network.state_dict().items()
+                            }
+                            stale_epochs = 0
+                        else:
+                            stale_epochs += 1
+                        if (
+                            early_stopping_patience is not None
+                            and stale_epochs >= early_stopping_patience
+                        ):
+                            break
+                    network.train()
+                if best_state is not None:
+                    network.load_state_dict(best_state)
+                member_history["best_epoch"] = best_epoch or len(
+                    member_history["train_loss"]
+                )
+                training_history.append(member_history)
             network.eval()
             members.append(network)
 
@@ -440,6 +605,18 @@ class ProbabilisticSpatialEnsemble:
                 "modis_instrument": _serializable_scalar(
                     sample.metadata.get("modis_instrument")
                 ),
+                "modis_source_archive": _serializable_scalar(
+                    sample.metadata.get("modis_source_archive")
+                ),
+                "modis_source_file": _serializable_scalar(
+                    sample.metadata.get("modis_source_file")
+                ),
+                "modis_source_row_number": _serializable_scalar(
+                    sample.metadata.get("modis_source_row_number")
+                ),
+                "modis_source_record_fingerprint": _serializable_scalar(
+                    sample.metadata.get("modis_source_record_fingerprint")
+                ),
                 "grid_height": self.grid_height,
                 "grid_width": self.grid_width,
                 "grid_resolution_m": _serializable_scalar(
@@ -453,6 +630,10 @@ class ProbabilisticSpatialEnsemble:
         self.training_cell_count = int(target_values.size)
         self.member_seeds = member_seeds
         self.positive_class_weight = positive_class_weight
+        self.training_history = tuple(training_history)
+        self.training_device = str(selected_device)
+        self.training_duration_seconds = time.perf_counter() - started
+        self._device = selected_device
         return self
 
     def _input_tensor(
@@ -505,7 +686,7 @@ class ProbabilisticSpatialEnsemble:
         with torch.no_grad():
             for network in self._members:
                 member_probabilities.append(
-                    network(inputs)[0, 0].cpu().numpy()
+                    network(inputs.to(self._device))[0, 0].cpu().numpy()
                 )
         metadata: Dict[str, object] = {
             "product_type": (
@@ -567,6 +748,9 @@ class ProbabilisticSpatialEnsemble:
             "input_channel_names": list(self.input_channel_names),
             "preprocessing": self._preprocessing.to_payload(),
             "member_seeds": list(self.member_seeds),
+            "training_history": list(self.training_history),
+            "training_device": self.training_device,
+            "training_duration_seconds": self.training_duration_seconds,
             "model_state_dicts": [
                 {
                     name: value.detach().cpu()
@@ -653,6 +837,14 @@ class ProbabilisticSpatialEnsemble:
         model.training_parent_metadata = tuple(training["parent_metadata"])
         model.training_cell_count = int(training["cell_count"])
         model.positive_class_weight = float(training["positive_class_weight"])
+        model.training_history = tuple(
+            payload.get("training_history", ())
+        )
+        model.training_device = str(payload.get("training_device", "unknown"))
+        model.training_duration_seconds = float(
+            payload.get("training_duration_seconds", 0.0)
+        )
+        model._device = torch.device("cpu")
         return model
 
 

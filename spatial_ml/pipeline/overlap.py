@@ -29,6 +29,12 @@ _IDENTITY_FIELDS = (
     "satellite",
     "instrument",
 )
+_SOURCE_PROVENANCE_FIELDS = (
+    "source_archive",
+    "source_file",
+    "source_row_number",
+    "source_record_fingerprint",
+)
 _REQUIRED_COLUMNS = {"sensor", *_OBSERVATION_FIELDS}
 _WGS84 = Geod(ellps="WGS84")
 _MIN_WGS84_CURVATURE_RADIUS_M = 6_335_439.327
@@ -98,13 +104,17 @@ def generate_observation_ids(
             + ", ".join(missing)
         )
 
+    identity_fields = _IDENTITY_FIELDS
+    if "source_record_fingerprint" in records.columns:
+        identity_fields = (*identity_fields, "source_record_fingerprint")
+
     ids = []
     for _, record in records.iterrows():
         identity = [
             normalized_sensor,
             *(
                 _identity_value(field, record[field])
-                for field in _IDENTITY_FIELDS
+                for field in identity_fields
             ),
         ]
         encoded = json.dumps(identity, separators=(",", ":"), ensure_ascii=True)
@@ -198,6 +208,9 @@ def _empty_pair_record(modis_record: pd.Series) -> Dict[str, object]:
     for field in _OBSERVATION_FIELDS:
         record[f"modis_{field}"] = modis_record[field]
         record[f"viirs_{field}"] = pd.NA
+    for field in _SOURCE_PROVENANCE_FIELDS:
+        record[f"modis_{field}"] = modis_record.get(field, pd.NA)
+        record[f"viirs_{field}"] = pd.NA
     record.update(
         {
             "spatial_distance_m": pd.NA,
@@ -227,6 +240,9 @@ def _candidate_record(
     for field in _OBSERVATION_FIELDS:
         record[f"modis_{field}"] = modis_record[field]
         record[f"viirs_{field}"] = viirs_record[field]
+    for field in _SOURCE_PROVENANCE_FIELDS:
+        record[f"modis_{field}"] = modis_record.get(field, pd.NA)
+        record[f"viirs_{field}"] = viirs_record.get(field, pd.NA)
     record.update(
         {
             "distance_m": distance_m,
@@ -245,6 +261,8 @@ def _pair_columns() -> List[str]:
         "viirs_id",
         *(f"modis_{field}" for field in _OBSERVATION_FIELDS),
         *(f"viirs_{field}" for field in _OBSERVATION_FIELDS),
+        *(f"modis_{field}" for field in _SOURCE_PROVENANCE_FIELDS),
+        *(f"viirs_{field}" for field in _SOURCE_PROVENANCE_FIELDS),
         "spatial_distance_m",
         "temporal_difference_minutes",
         "viirs_candidate_count",
@@ -261,6 +279,8 @@ def _candidate_columns() -> List[str]:
         "viirs_id",
         *(f"modis_{field}" for field in _OBSERVATION_FIELDS),
         *(f"viirs_{field}" for field in _OBSERVATION_FIELDS),
+        *(f"modis_{field}" for field in _SOURCE_PROVENANCE_FIELDS),
+        *(f"viirs_{field}" for field in _SOURCE_PROVENANCE_FIELDS),
         "distance_m",
         "time_difference_minutes",
         "delta_x_m",
@@ -380,6 +400,8 @@ def generate_overlap_dataset(
             nearest = matches[0]
             pair["viirs_id"] = nearest["viirs_id"]
             for field in _OBSERVATION_FIELDS:
+                pair[f"viirs_{field}"] = nearest[f"viirs_{field}"]
+            for field in _SOURCE_PROVENANCE_FIELDS:
                 pair[f"viirs_{field}"] = nearest[f"viirs_{field}"]
             pair["spatial_distance_m"] = nearest["distance_m"]
             pair["temporal_difference_minutes"] = nearest[
