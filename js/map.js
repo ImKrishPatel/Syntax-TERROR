@@ -276,7 +276,9 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       // little fire is nearly see-through, a lot of fire is solid: the picture shows where it is quiet
       let k = 0
       while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
-      ctx.globalAlpha = 0.18 + 0.82 * (breaks.length > 1 ? k / (breaks.length - 1) : 0.5)
+      const level = breaks.length > 1 ? k / (breaks.length - 1) : 1
+      if (level < 0.4) return                      // the quietest squares stay clear, so the picture shows
+      ctx.globalAlpha = Math.pow((level - 0.4) / 0.6, 1.3) * 0.75 + 0.2
       const c = data.cells[i]
       const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
       const y0 = (Y_MAX - mercY(c.lat + half)) / (2 * Y_MAX) * IMG, y1 = (Y_MAX - mercY(c.lat - half)) / (2 * Y_MAX) * IMG
@@ -286,14 +288,10 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     const out = smooth.getContext('2d')
     out.clearRect(0, 0, IMG, IMG)
     ctx.globalAlpha = 1
-    out.filter = `blur(${PX * 0.7}px)`   // soft ember glow instead of hard squares or dots
+    out.filter = `blur(${PX * 0.5}px)`   // soft ember glow instead of hard squares or dots
     out.drawImage(paint, 0, 0)
     out.filter = 'none'
-    out.globalCompositeOperation = 'lighter'   // a brighter core where fire is strongest
-    out.globalAlpha = 0.35
-    out.filter = `blur(${PX * 0.25}px)`
-    out.drawImage(paint, 0, 0)
-    out.filter = 'none'; out.globalAlpha = 1; out.globalCompositeOperation = 'source-over'
+
     fireImage.setUrl(smooth.toDataURL())
   }
   let heatPoints = null   // kept for the old name used by refresh()
