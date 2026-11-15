@@ -169,3 +169,29 @@ How it fits together:
 Every refresh or newly opened page starts on Home in the light theme, with no selected region, the full year range, the default map style, and colour-blind colours and spoken descriptions off. Preferences and favourites last only for the current page. Old URL selections are ignored on startup, including bookmarked/shared selection links. Browser back/forward cache restores reload the page to reset it too. Existing saved browser storage is not deleted, but is no longer used.
 
 Speak uses an installed English on-device recognition model when the browser exposes it as available; no language pack is downloaded automatically. Otherwise it uses the browser speech service. A network error means that service could not be reached, not that the keyword was invalid. HTTPS (or localhost for development) is required. Actual Windows browser/service availability must be verified on the affected device; automated tests mock these browser APIs.
+
+### Speak: places and date ranges
+
+The same Speak button and Option+Shift+M (Mac) / Alt+Shift+M (Windows) shortcut also accept:
+- `Search Calgary` (or `Find Calgary`): select that place using the website search sources.
+- `Time period 2008 to 2022` (or `2008 to 2022`): change the current date range.
+- `Time period 2024`: select one year. Bare `2024` retains the existing annual playback action.
+- `Calgary from 2008 to 2022`: select both place and period.
+
+Years must be within 2006–2026 and in ascending order. Validate before changing either part of a combined request. Unrecognized or ambiguous places say `Try again` and preserve the selection; qualify the name with a state or country when needed. Recognized selections receive a spoken confirmation. Navigation retains the current feature panel, and selecting a place from Home goes to the map just as typed search does. It does not open Listen or automatically play the selected range. A newer action supersedes an outstanding voice search.
+
+### Improved voice place matching
+
+Natural phrases such as `Search for Calgary`, `Please find Calgary`, `Show me Calgary`, and `Take me to Calgary` now work. Accents, spacing, Saint/St and Mount/Mt are normalized. Speak requests up to five recognition alternatives (availability depends on the browser), and checks alternative place spellings without changing the recognized date range. Duplicate nearby geocoder results are combined. Geographic results are preferred over businesses and streets.
+
+A clear exact match selects directly. Close spellings and ambiguous matches produce a spoken `Did you mean ...?` question. Click Speak again (or use the same shortcut) and say `Yes` to apply the place and original dates, or `No` to cancel. You can instead search again with a country/state. Suggestions expire after two minutes; Leave cancels the pending suggestion. Unrelated names still say `Try again`. This improves command interpretation and matching; measured recognition accuracy still requires real microphone testing across users and browsers.
+
+### Precise voice locations, spelling, and country selection
+
+Voice-selected places now use geocoder bounds without expansion to the fire-grid size. If bounds are unavailable, a small rectangle around the place centre is used. Map fitting supports closer zoom and preserves four-decimal coordinates. The extent is a selection rectangle, not an exact municipal boundary polygon. The fire dataset still uses 2-degree cells: a tight city selection can contain no cell centres, and the UI explains this rather than treating it as zero fires.
+
+If a place cannot be matched, Speak gives spelling instructions. Say `Search C A L G A R Y`, or `Search C A L G A R Y Pause C A N A D A`. Say the word `Pause` for the country separator; silence can finish browser recognition. Say `space` between words when spelling a multiword place or country. Common spoken English letter names are accepted too.
+
+Voice search checks online results even when the offline city list has one exact match. It requests up to 30 results per query and preserves country metadata. If several countries match, it reads the countries found and waits for `Choose Canada`, for example. Multiple matches within a country are numbered, and `Choose one` selects an option. `Yes` cannot silently select the first of multiple candidates. These are countries returned by the available search service, not a guaranteed exhaustive global list. Pending choices expire after two minutes, and No or Leave cancels them.
+
+Verification: 24 automated tests cover precise Calgary bounds, spelled places/countries, country choices, invalid dates, and existing audio commands. A temporary browser harness exercised a simulated spoken Calgary command through the real application and geocoder; the final satellite view was centered on Calgary. The harness was removed. Real microphone spelling accuracy still depends on the browser transcription service. The existing street-map tile service displayed an API-key warning during this check; satellite imagery remained available.

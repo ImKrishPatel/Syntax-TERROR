@@ -18,7 +18,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
 
   const map = L.map(element, {
     zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
-    minZoom: 2, maxZoom: 11,
+    minZoom: 2, maxZoom: 13,
     maxBounds: [[-85, -260], [86, 260]],
     zoomControl: false, attributionControl: false,
     boxZoom: false,   // Shift + drag draws a new area instead
@@ -26,7 +26,10 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   L.control.zoom({ position: 'topright' }).addTo(map)
   L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map)
   // keep the map the right size when the layout changes (a panel opens, the menu hides)
-  if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe(element)
+  if (window.ResizeObserver) new ResizeObserver(() => {
+    map.invalidateSize({pan:false, animate:false})
+    if (area && !plain && element.clientWidth && element.clientHeight) fitArea()
+  }).observe(element)
 
   // Layers are stacked in "panes", lowest first:
   // background picture (Leaflet's own tile pane) < cells < place names < selected area
@@ -330,9 +333,9 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   })
   const areaLayers = [shade, box, ...handles]
 
-  // sorts the corners and rounds to 0.1 degrees
+  // sorts corners while preserving precise voice-selected bounds
   function tidyArea([latA, lonA, latB, lonB]) {
-    const round = v => Math.round(v * 10) / 10
+    const round = v => Math.round(v * 10000) / 10000
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
     return [
       round(clamp(Math.min(latA, latB), -89, 89)), round(clamp(Math.min(lonA, lonB), -180, 180)),
@@ -364,8 +367,12 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   function fitArea() {
     if (!area) return
     const [s, w, n, e] = area
+    // A voice search can switch from the hidden Home map to the visible map.
+    // Recalculate its dimensions before centering, and cancel old pan animations.
+    map.stop()
+    map.invalidateSize({pan:false, animate:false})
     // leave room around the box so you can see where it sits
-    map.fitBounds(L.latLngBounds([[s, w], [n, e]]).pad(0.35), { maxZoom: 8 })
+    map.fitBounds(L.latLngBounds([[s, w], [n, e]]).pad(0.08), { maxZoom: 13, animate:false, reset:true })
   }
 
   // Draw a new box by dragging on the map. onFinish() is called when it ends.
@@ -474,7 +481,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     setBasemap, setDark, setImageryDate, imageryPeriod,
     setPlain, setArea, fitArea, startDrawing,
     hasRegimes: () => !!regimeLayer,
-    refresh: () => map.invalidateSize(),
+    refresh: () => map.invalidateSize({pan:false, animate:false}),
     showWorld: () => map.setView([25, 0], 2.25),
     openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),
   }

@@ -17,7 +17,7 @@ test('all requested keywords, spoken years and invalid phrases',()=>{
    const c=parseVoiceCommand(phrase);assert.equal(c.metric,'frp');assert.equal(c.mode,phrase.endsWith('Unusual')?'anomaly':'activity');assert.equal(c.month,phrase.startsWith('April')?3:null)
  }
  for(const [word,speed] of [['Slow',.75],['Normal',1],['Fast',1.5]]){assert.equal(parseVoiceCommand(`Playback ${word}`),null);assert.equal(parseVoiceCommand(word).speed,speed)}
- for(const bad of ['play everything','replay','go back','2024 activity please','April Activity','2024 sound guide'])assert.equal(parseVoiceCommand(bad),null)
+ for(const bad of ['play everything','replay','go back','April Activity','2024 sound guide'])assert.equal(parseVoiceCommand(bad),null)
 })
 function element(){return {value:'',checked:false,disabled:false,textContent:'',hidden:true,children:[],setAttribute(){},classList:{add(){},remove(){}},appendChild(b){this.children.push(b)},replaceChildren(...children){this.children=children}}}
 test('commands force speech and dispatch year, month, anomaly, summary and ordered guide correctly',async()=>{
@@ -29,8 +29,11 @@ test('commands force speech and dispatch year, month, anomaly, summary and order
  const plays=[];let voice;let panel;let focused=null;let mode='amount';let opened=0;let voiceStarts=0
  const table={years:[2023,2024],metric:'count',value:[Array(12).fill(10),Array(12).fill(20)],score:[Array(12).fill(0),[0,0,0,1,0,3,0,0,2.5,0,0,0]],estimatedShare:[Array(12).fill(0),Array(12).fill(0)],usual:Array.from({length:12},()=>({years:2,sd:3,mean:15}))}
  const update=()=>panel.update(table,focused,`same-area-${table.metric}`,true,mode)
- panel=createListeningPanel({onOpen:()=>{opened++},onVoiceStart:()=>{voiceStarts++},onPick:(year,month)=>{focused={year,month};update()},onHighlight(){},onMode:newMode=>{panel.stop();mode=newMode;update()},onMetric:metric=>{panel.stop();table.metric=metric;update()},audioPlayer:{stop(){},ready:async()=>{},play:async options=>{plays.push(options);return true}},microphoneFactory:options=>{voice=options;return {cancel(){}}}})
+ panel=createListeningPanel({onNavigate:async command=>`Selected ${command.place}. Time period set to ${command.fromYear} to ${command.toYear}.`,onOpen:()=>{opened++},onVoiceStart:()=>{voiceStarts++},onPick:(year,month)=>{focused={year,month};update()},onHighlight(){},onMode:newMode=>{panel.stop();mode=newMode;update()},onMetric:metric=>{panel.stop();table.metric=metric;update()},audioPlayer:{stop(){},ready:async()=>{},play:async options=>{plays.push(options);return true}},microphoneFactory:options=>{voice=options;return {cancel(){}}}})
  update()
+ await voice.onCommand(parseVoiceCommand('Calgary from 2008 to 2022'))
+ assert.equal(opened,0);assert.equal(plays.length,1);assert.match(plays[0].text,/calgary/);assert.equal(plays[0].speech,true)
+ plays.length=0
  await voice.onCommand(parseVoiceCommand('2024 Activity'))
  assert.equal(plays.length,12);assert.ok(plays.every(p=>p.speech));assert.match(plays[0].text,/January 2024/);assert.match(plays[11].text,/December 2024/)
  assert.equal(get('audioSpeech').checked,true)
@@ -73,7 +76,7 @@ test('commands force speech and dispatch year, month, anomaly, summary and order
  assert.equal(plays.length,0);assert.deepEqual(focused,oldFocus);assert.match(get('voiceStatus').textContent,/cancelled/)
  plays.length=0
  await voice.onCommand(parseVoiceCommand('1999 Activity'))
- assert.equal(plays.length,1);assert.match(plays[0].text,/outside the selected time period/)
+ assert.equal(plays.length,1);assert.match(plays[0].text,/2006 to 2026/)
 })
 test('recognition waits for end, rejects unknown input once and handles denied access',()=>{
  globalThis.window={speechSynthesis:{},addEventListener(){}}
@@ -142,5 +145,16 @@ test('insecure pages and speech-service failures explain the actual limitation',
  window.isSecureContext=true
  button.onclick();rec.onerror({error:'network'});rec.onend()
  assert.equal(messages.length,2);assert.match(messages.at(-1),/speech recognition service/)
+ mic.cancel()
+})
+
+test('recognition keeps alternative place transcripts without changing requested dates',()=>{
+ globalThis.window={speechSynthesis:{},addEventListener(){}}
+ let rec;class Recognition{constructor(){rec=this}start(){}stop(){}abort(){}}
+ const commands=[],button=element()
+ const mic=attachMicrophone({button,status:element(),Recognition,onStart(){},onCommand:c=>commands.push(c),onMessage(){}})
+ button.onclick();assert.equal(rec.maxAlternatives,5)
+ rec.onresult({results:[[{transcript:'Search Call Gary from 2008 to 2022'},{transcript:'Search Calgary from 2008 to 2022'},{transcript:'Search Calgary from 2009 to 2022'}]]})
+ rec.onend();assert.deepEqual(commands[0].placeAlternatives,['calgary'])
  mic.cancel()
 })

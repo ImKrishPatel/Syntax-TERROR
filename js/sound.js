@@ -2,9 +2,9 @@
 import { createPlayer, soundFor } from './fire-audio.js'
 import { listeningMonths, describeMonth, seasonSummary, strongestMonth } from './listening-model.js'
 import { MONTHS } from './config.js'
-import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=fresh-start-8'
+import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=voice-place-detail-15'
 
-export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, onSpeechChange, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
+export function createListeningPanel({ onNavigate, onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, onSpeechChange, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
   const $ = id => document.getElementById(id)
   const player = audioPlayer
   let table, context = '', covered = true, months = [], year, index = 0, token = 0, running = false
@@ -100,14 +100,15 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, on
     }
     $('audioExamples').appendChild(b)
   }
-  async function voiceMessage(text) {
+  async function voiceMessage(text, sentencePauseMs=0) {
     stop(); const mine=token; $('audioError').textContent=''
-    try {const set=settings();await player.play({text,frequencies:[],...set,speech:true,speechRate:set.speed})}
+    try {const set=settings();await player.play({text,frequencies:[],...set,speech:true,speechRate:set.speed,sentencePauseMs})}
     catch(e) {if(mine===token)$('audioError').textContent=e.message}
   }
   async function voiceCommand(command) {
     stop()
     if(command.type==='leave') {
+      await onNavigate?.({type:'cancelPlace'})
       if(beforeMicrophone) {
         $('audioSpeech').checked=beforeMicrophone.speech
         onSpeechChange?.(beforeMicrophone.speech)
@@ -123,6 +124,15 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, on
     $('audioMute').checked=false
     if(Number($('audioVolume').value)===0)$('audioVolume').value='0.6'
     $('audioVolumeText').textContent=`Volume · ${Math.round(Number($('audioVolume').value)*100)}%`
+    if(command.type==='navigate' || command.type==='confirmPlace' || command.type==='choosePlace') {
+      const mine=token
+      const message=await onNavigate(command,()=>mine===token)
+      if(message) { $('voiceStatus').textContent=message; await voiceMessage(message,200) }
+      return
+    }
+    if(command.year && (command.year<2006 || command.year>2026)) {
+      await voiceMessage('Our data supports 2006 to 2026. Choose a year within that range.');return
+    }
     if(command.type==='speed') {
       $('audioSpeed').value=String(command.speed)
       await voiceMessage(`Playback speed set to ${command.speed===.75?'slow':command.speed===1?'normal':'fast'}.`)

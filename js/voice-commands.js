@@ -2,13 +2,29 @@ const MONTHS = ['january','february','march','april','may','june','july','august
 const small = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen']
 const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety']
 const words = n => n<20 ? small[n] : tens[Math.floor(n/10)]+(n%10 ? ' '+small[n%10] : '')
+// Decode only fully spelled segments; normal multi-word place names stay intact.
+export function decodeSpelledPlace(text) {
+  const letterNames={ay:'a',bee:'b',be:'b',see:'c',sea:'c',dee:'d',ee:'e',eff:'f',gee:'g',aitch:'h',eye:'i',jay:'j',kay:'k',el:'l',ell:'l',em:'m',en:'n',oh:'o',pee:'p',cue:'q',queue:'q',are:'r',ar:'r',ess:'s',tee:'t',you:'u',vee:'v',ex:'x',why:'y',zee:'z',zed:'z'}
+  const decode=part=>{
+    if(/\bspace\b/.test(part))return part.split(/\bspace\b/).map(decode).join(' ')
+    const tokens=part.trim().replace(/double u/g,'w').split(/\s+/)
+    if(tokens.length>1 && tokens.every(t=>/^[a-z]$/.test(t) || letterNames[t]))return tokens.map(t=>letterNames[t] || t).join('')
+    return part.trim()
+  }
+  return text.split(/\bpause\b/).map(decode).filter(Boolean).join(' ')
+}
 export function parseVoiceCommand(transcript) {
-  let text=String(transcript).toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().replace(/\bacitivty\b/g,'activity')
+  let text=String(transcript).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().replace(/\bacitivty\b/g,'activity')
+  text=text.replace(/^please /,'').replace(/ please$/,'')
   // Recognizers may return either digits or words for a spoken year.
   for(let n=99;n>=0;n--) {
     const forms=n===0 ? ['two thousand','twenty hundred'] : [`two thousand and ${words(n)}`,`two thousand ${words(n)}`,`twenty ${n<10?'oh '+words(n):words(n)}`]
     for(const form of forms) text=text.replace(new RegExp(`\\b${form}\\b`,'g'),String(2000+n))
   }
+  const selection=/^(?:choose|select|country) (.+)$/.exec(text)
+  if(selection)return {type:'choosePlace',choice:decodeSpelledPlace(selection[1])}
+  if(['yes','yes please','confirm'].includes(text))return {type:'confirmPlace',accept:true}
+  if(['no','no thanks','cancel search'].includes(text))return {type:'confirmPlace',accept:false}
   if(text==='leave')return {type:'leave'}
   if(text==='keyword guide')return {type:'keywords'}
   if(text==='sound guide')return {type:'guide'}
@@ -16,6 +32,14 @@ export function parseVoiceCommand(transcript) {
   if(speed)return {type:'speed',speed:({slow:.75,normal:1,fast:1.5})[speed[1]]}
   const yearAction=/^(\d{4}) (season overview|strongest ano)$/.exec(text)
   if(yearAction)return {type:yearAction[2]==='season overview'?'summary':'anomaly',year:Number(yearAction[1])}
+  const period=/^(?:(?:time period|date range|years|from) )?(\d{4})(?: to (\d{4}))?$/.exec(text)
+  // Bare single years retain the existing annual audio command.
+  if(period && (period[2] || /^(time period|date range|years|from) /.test(text)))
+    return {type:'navigate',place:null,fromYear:Number(period[1]),toYear:Number(period[2] || period[1])}
+  const combined=/^(?:(?:search(?: for)?|find|show(?: me)?|go to) )?(.+?) (?:from |for )?(\d{4}) to (\d{4})$/.exec(text)
+  if(combined)return {type:'navigate',place:decodeSpelledPlace(combined[1]),fromYear:Number(combined[2]),toYear:Number(combined[3])}
+  const place=/^(?:search(?: for)?|find|go to|show(?: me)?|take me to|look up) (.+)$/.exec(text)
+  if(place)return {type:'navigate',place:decodeSpelledPlace(place[1]),fromYear:null,toYear:null}
   const match=new RegExp(`^(?:(${MONTHS.join('|')}) )?(\\d{4})(?: (activity|unusual activity|fire energy|fire energy unusual))?$`).exec(text)
   if(!match)return null
   return {type:'play',year:Number(match[2]),month:match[1]?MONTHS.indexOf(match[1]):null,mode:['unusual activity','fire energy unusual'].includes(match[3])?'anomaly':'activity',metric:match[3]?.startsWith('fire energy')?'frp':'count'}
@@ -49,9 +73,9 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
       return
     }
     const rec=new Recognition();active=rec
-    let transcript=null, problem=null, finished=false
+    let transcript=null, alternatives=[], problem=null, finished=false
     if(localModelReady) rec.processLocally=true
-    rec.lang='en-US';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1
+    rec.lang='en-US';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=5
     status.textContent='Requesting microphone. Allow access if your browser asks.'
     button.setAttribute('aria-pressed','true');button.classList.add('is-recording')
     const finish=()=>{
@@ -59,6 +83,9 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
       finished=true;active=null;reset()
       if(problem) {status.textContent=problem;onMessage(problem);return}
       const command=transcript===null?null:parseVoiceCommand(transcript)
+      if(command?.type==='navigate' && command.place) {
+        command.placeAlternatives=alternatives.map(parseVoiceCommand).filter(c=>c?.type==='navigate' && c.place && c.fromYear===command.fromYear && c.toYear===command.toYear).map(c=>c.place).filter(p=>p!==command.place)
+      }
       status.textContent=transcript ? `Heard: “${transcript}”` : 'No command heard.'
       if(command) {
         // Recognition success does not guarantee playback success. Surface both
@@ -74,7 +101,7 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
       else {status.textContent+=' Try again with right keyword';onMessage('Try again with right keyword')}
     }
     rec.onstart=()=>{if(active===rec)status.textContent='Listening… say one command.'}
-    rec.onresult=event=>{if(active!==rec)return;transcript=event.results[0][0].transcript;rec.stop()}
+    rec.onresult=event=>{if(active!==rec)return;alternatives=Array.from(event.results[0]).slice(0,5).map(result=>result.transcript);transcript=alternatives[0];rec.stop()}
     rec.onnomatch=()=>{rec.stop()}
     rec.onerror=event=>{
       if(active!==rec)return
@@ -100,6 +127,14 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
 }
 
 export const KEYWORD_GUIDE = [
+  ['Yes / No', 'confirm or reject a suggested place after clicking Speak again'],
+  ['Search C A L G A R Y Pause C A N A D A', 'spell a place and optional country; say the word Pause'],
+  ['Choose Canada', 'select a country from the spoken place matches'],
+  ['Choose one', 'select a numbered place match'],
+  ['Search Calgary', 'select a place; replace Calgary with your place'],
+  ['Time period 2008 to 2022', 'set the years; use 2006 through 2026'],
+  ['Calgary from 2008 to 2022', 'select a place and its time period'],
+  ['Time period 2024', 'select one year'],
   ['Year Activity', 'a year’s hotspot activity'],
   ['Year Unusual Activity', 'a year’s unusual hotspot activity'],
   ['Month Year Activity', 'one month’s hotspot activity'],

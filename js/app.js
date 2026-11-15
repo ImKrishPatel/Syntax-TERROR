@@ -13,14 +13,16 @@ import { CONFIG, MONTHS } from './config.js'
 import { data, loadHotspots, loadJson, monthlyTotals, cellTotals, rowsAsCsv, monthIndex, cellsInArea } from './data.js'
 import { buildTable, monthVerdict, overviewVerdict, formatValue, formatNumber, formatPower, formatScore, LEVEL_TEXT } from './stats.js'
 import { SCORE_STEPS, setPalette, regimeColor } from './colors.js'
-import { createMap } from './map.js'
+import { createMap } from './map.js?v=voice-place-detail-15'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { createListeningPanel } from './sound.js?v=fresh-start-8'
+import { createListeningPanel } from './sound.js?v=voice-place-detail-15'
 import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
-import { wireSearch } from './search.js'
+import { voicePlaceBounds } from './place-bounds.js'
+import { wireSearch, resolveSpokenPlace } from './search.js?v=voice-place-detail-15'
+import { createVoiceNavigator } from './voice-navigation.js?v=voice-place-detail-15'
 import { startFlames } from './flames.js'
-import { loadPref, savePref, saveTheme } from './prefs.js?v=fresh-start-8'
+import { loadPref, savePref, saveTheme } from './prefs.js?v=voice-place-detail-15'
 import { initChat } from './chat.js'
 
 const $ = id => document.getElementById(id)
@@ -281,7 +283,7 @@ function renderVerdict(picked, totals, cellsInside) {
     el.className = 'verdict level-none'
     el.innerHTML = where +
       '<h3 class="verdict-sentence">There is no data for this area.</h3>' +
-      '<p class="verdict-help">No satellite detected a hotspot here, or the box is over the sea. Drag the box onto land, or search for a place.</p>'
+      '<p class="verdict-help">No fire-data grid centres fall inside this selection. A close city view can be smaller than our 2-degree data cells. Enlarge the box to inspect regional data; missing coverage does not mean no fires.</p>'
     return
   }
 
@@ -527,6 +529,11 @@ function show(nextPage, nextFeature = null) {
       mapView.refresh()
       if (state.hasArea) { mapView.setArea(state.area); mapView.fitArea() }
       else if (pageChanges) mapView.showWorld()
+      requestAnimationFrame(() => {
+        if (page !== 'map') return
+        mapView.refresh()
+        if (state.hasArea) mapView.fitArea()
+      })
     }
     if (page === 'map' && pageChanges) showTip(false)
   }
@@ -558,14 +565,15 @@ function showTip(force, text = MAP_TIP) {
 // Places: search results, favourites, suggestions
 // ---------------------------------------------------------------------------
 // Show a place that was searched for or picked from a chip.
-function goTo(place) {
+function goTo(place, precise = false) {
   // no outline (a town, a point): use a box around it
-  let [s, w, n, e] = place.box || [place.lat - 3, place.lon - 5, place.lat + 3, place.lon + 5]
+  let [s, w, n, e] = (precise ? voicePlaceBounds(place) : place.box) || [place.lat - 3, place.lon - 5, place.lat + 3, place.lon + 5]
   // make small places big enough to hold a few grid squares
-  const minLat = CONFIG.cellSize * 2, minLon = CONFIG.cellSize * 3
+  const minLat = precise ? 0.01 : CONFIG.cellSize * 2, minLon = precise ? 0.01 : CONFIG.cellSize * 3
   if (n - s < minLat) { const mid = (s + n) / 2; s = mid - minLat / 2; n = mid + minLat / 2 }
   if (e - w < minLon) { const mid = (w + e) / 2; w = mid - minLon / 2; e = mid + minLon / 2 }
-  const round = v => Math.round(v * 10) / 10
+  const scale = precise ? 10000 : 10
+  const round = v => Math.round(v * scale) / scale
   const area = [round(Math.max(-89, s)), round(Math.max(-180, w)), round(Math.min(89, n)), round(Math.min(180, e))]
   update({ area, label: place.name === 'Custom area' ? null : place.name, month: null })
   show('map', feature)
@@ -848,6 +856,13 @@ function wireData() {
 
   // The Listen panel shares month selection with the calendar and the map.
   listening = createListeningPanel({
+    onNavigate: createVoiceNavigator({
+      resolvePlace: (query, signal, alternatives) => resolveSpokenPlace(query, {getSaved:savedPlaces, getOffline:()=>mapView.getPlaces(), signal, alternatives}),
+      apply: ({place,fromYear,toYear}) => {
+        if(fromYear!==null) update({fromYear,toYear,month:null,mapYear:null})
+        if(place) goTo(place, true)
+      },
+    }),
     onOpen: () => openFeature('listen'),
     onVoiceStart: () => { if (isPlaying()) stopPlaying() },
     onSpeechChange: enabled => { settings.speech = enabled; savePref('speech', enabled); applySettings() },
