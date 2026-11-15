@@ -391,27 +391,37 @@ def match_observations(modis, viirs, target_date, used_viirs=None):
 
 
 def main():
-    """Run a five-date FRP matching test using existing partitions."""
+    """Match MODIS and VIIRS detections on the selected calibration dates.
 
-    # Five representative dates across the NASA dataset.
-    test_dates = [
-        "2021-11-14",
-        "2023-01-24",
-        "2024-03-22",
-        "2025-05-29",
-        "2026-08-01",
-    ]
+    python shriya_backend/frp_multi_date_matching.py          # dates from select_calibration_dates.py
+    python shriya_backend/frp_multi_date_matching.py --all    # every date both sensors cover
+    """
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--all", action="store_true", help="match every overlapping date")
+    args = parser.parse_args()
 
-    # Confirm that the existing daily partitions are available.
-    for date in test_dates:
-        modis_file = TEMP_DIR / "MODIS" / f"{date}.csv"
+    # Split the cleaned files into one CSV per day (once).
+    for sensor, source in (("MODIS", MODIS_FILE), ("VIIRS", VIIRS_FILE)):
+        if not (TEMP_DIR / sensor).exists() or not any((TEMP_DIR / sensor).glob("*.csv")):
+            partition_sensor_data(source, sensor)
 
-        if not modis_file.exists():
-            raise FileNotFoundError(modis_file)
+    if args.all:
+        test_dates = get_overlapping_dates()
+    else:
+        selected = DATA_DIR / "selected_calibration_dates.csv"
+        if not selected.exists():
+            raise FileNotFoundError(f"{selected} (run select_calibration_dates.py first, or use --all)")
+        test_dates = sorted(pd.read_csv(selected)["acq_date"].astype(str))
 
-    # Separate test outputs: do not overwrite full-run outputs.
-    output_path = DATA_DIR / "real_frp_matches_test_5_dates.csv"
-    diagnostics_path = DATA_DIR / "real_frp_matching_test_5_dates.json"
+    test_dates = [d for d in test_dates if (TEMP_DIR / "MODIS" / f"{d}.csv").exists()
+                  and (TEMP_DIR / "VIIRS" / f"{d}.csv").exists()]
+    if not test_dates:
+        raise ValueError("None of the requested dates are covered by both sensors.")
+
+    # These are the files the API serves (/frp/matches, /frp/matching-diagnostics).
+    output_path = DATA_DIR / "real_frp_matches_multi_date.csv"
+    diagnostics_path = DATA_DIR / "real_frp_matching_diagnostics.json"
 
     if output_path.exists():
         output_path.unlink()
@@ -468,7 +478,7 @@ def main():
         )
 
     diagnostics = {
-        "test_mode": True,
+        "test_mode": not args.all,
         "dates_processed": len(test_dates),
         "first_date": test_dates[0],
         "last_date": test_dates[-1],
@@ -487,7 +497,7 @@ def main():
     with open(diagnostics_path, "w") as file:
         json.dump(diagnostics, file, indent=4)
 
-    print("\nFIVE-DATE FRP MATCHING TEST COMPLETED")
+    print("\nFRP MATCHING COMPLETED")
     print("------------------------------------")
     print("Dates processed:", len(test_dates))
     print("MODIS observations:", f"{total_modis:,}")

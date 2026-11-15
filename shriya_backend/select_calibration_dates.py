@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 
-DATA = Path("shriya_backend/data")
+DATA = Path(__file__).resolve().parent / "data"
 
 modis = pd.read_csv(
     DATA / "modis_daily_frp_real.csv",

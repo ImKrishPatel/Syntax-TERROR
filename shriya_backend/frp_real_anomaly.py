@@ -3,8 +3,11 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-DATA = Path("shriya_backend/data")
+DATA = Path(__file__).resolve().parent / "data"
 THRESHOLD = 3.0
+# A region-day must have at least this many detections to count as an anomaly,
+# so one or two stray pixels cannot top the list.
+MIN_HOTSPOTS = 10
 
 FILES = {
     "MODIS": DATA / "modis_regional_frp_real.csv",
@@ -71,7 +74,9 @@ def detect_anomalies(sensor, path):
         )
 
         region["is_anomaly"] = (
-            region["frp_anomaly"] | region["count_anomaly"]
+            (region["frp_anomaly"] | region["count_anomaly"])
+            & (region["hotspot_count"] >= MIN_HOTSPOTS)
+            & (region["total_frp"] > 0)
         )
 
         region["lat_bin"] = lat

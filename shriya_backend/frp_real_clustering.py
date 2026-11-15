@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
 
-DATA = Path("shriya_backend/data")
+DATA = Path(__file__).resolve().parent / "data"
 
 EARTH_RADIUS_KM = 6371.0
 CLUSTER_DISTANCE_KM = 1600

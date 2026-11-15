@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 
-DATA = Path("shriya_backend/data")
+DATA = Path(__file__).resolve().parent / "data"
 CHUNK_SIZE = 500_000
 GRID_SIZE = 10
 
@@ -24,7 +24,7 @@ def process_sensor(sensor, path):
             compression="gzip",
             chunksize=CHUNK_SIZE,
             usecols=[
-                "acq_date", "latitude", "longitude", "frp"
+                "acq_date", "latitude", "longitude", "frp", "type"
             ],
         ),
         start=1,
@@ -35,6 +35,14 @@ def process_sensor(sensor, path):
         chunk = chunk.dropna(
             subset=["acq_date", "latitude", "longitude", "frp"]
         )
+
+        # Keep vegetation fires only (FIRMS type 0). Types 1-3 are volcanoes,
+        # gas flares/industry and offshore platforms, and zero-FRP detections
+        # are not usable fire energy. Without this, a couple of 0 MW detections
+        # near the South Pole showed up as the strongest "anomalies".
+        if "type" in chunk:
+            chunk = chunk[chunk["type"].fillna(0).astype(int) == 0]
+        chunk = chunk[chunk["frp"] > 0]
 
         # Assign detections to 10-degree geographic grid cells.
         chunk["lat_bin"] = (

@@ -12,10 +12,14 @@ from sklearn.metrics import (
     mean_squared_error,
 )
 
-DATA = Path("shriya_backend/data")
+DATA = Path(__file__).resolve().parent / "data"
 MATCH_FILE = DATA / "real_frp_matches_multi_date.csv"
 
 CHUNK_SIZE = 250_000
+# Grid used by the web app (CONFIG.cellSize). Per-pixel FRP pairs are noisy
+# (different pixel sizes, view angles and overpass times); summed per grid cell
+# and day, VIIRS predicts MODIS far better, and that is the scale the app shows.
+GRID_DEGREES = 2.0
 
 
 def main():
@@ -57,10 +61,11 @@ def main():
 
     train_count = 0
     test_count = 0
+    cell_parts = []
 
     for chunk in pd.read_csv(
         MATCH_FILE,
-        usecols=["date", "frp_modis", "frp_viirs"],
+        usecols=["date", "latitude_modis", "longitude_modis", "frp_modis", "frp_viirs"],
         chunksize=CHUNK_SIZE,
     ):
         chunk["frp_modis"] = pd.to_numeric(
@@ -76,6 +81,13 @@ def main():
             & (chunk["frp_modis"] > 0)
             & (chunk["frp_viirs"] > 0)
         ]
+
+        cell_parts.append(
+            chunk.assign(
+                lat_cell=(chunk["latitude_modis"] // GRID_DEGREES).astype(int),
+                lon_cell=(chunk["longitude_modis"] // GRID_DEGREES).astype(int),
+            ).groupby(["date", "lat_cell", "lon_cell"])[["frp_modis", "frp_viirs"]].sum()
+        )
 
         training = chunk[chunk["date"] < cutoff_date]
         testing = chunk[chunk["date"] >= cutoff_date]
@@ -144,7 +156,19 @@ def main():
         log_predictions,
     )
 
-    # Save both models' coefficients and test metrics.
+    # Grid-scale model: matched FRP summed per grid cell and day.
+    cells = pd.concat(cell_parts).groupby(level=[0, 1, 2]).sum().reset_index()
+    cell_train = cells[cells["date"] < cutoff_date]
+    cell_test = cells[cells["date"] >= cutoff_date]
+    grid_model = LinearRegression()
+    grid_model.fit(cell_train[["frp_viirs"]], cell_train["frp_modis"])
+    grid_results = evaluate(
+        f"GRID MODEL ({GRID_DEGREES:g} DEGREE CELL-DAY SUMS) - TEST DATA",
+        cell_test["frp_modis"],
+        grid_model.predict(cell_test[["frp_viirs"]]),
+    )
+
+    # Save the models' coefficients and test metrics.
     results = {
         "calibration_direction": "VIIRS_FRP_to_MODIS_FRP",
         "target": "MODIS FRP (MW)",
@@ -166,6 +190,14 @@ def main():
             "intercept": float(log_model.intercept_),
             "slope": float(log_model.coef_[0]),
             "test_metrics": log_results,
+        },
+        "grid_cell_day": {
+            "grid_degrees": GRID_DEGREES,
+            "intercept": float(grid_model.intercept_),
+            "slope": float(grid_model.coef_[0]),
+            "training_cells": int(len(cell_train)),
+            "testing_cells": int(len(cell_test)),
+            "test_metrics": grid_results,
         },
         "status": "preliminary_temporal_holdout_evaluation",
     }
