@@ -8,9 +8,9 @@ import os
 import re
 import shutil
 import tempfile
+import zipfile
 from collections import Counter
 from datetime import date
-from itertools import zip_longest
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple
 
@@ -18,14 +18,14 @@ import numpy as np
 import pandas as pd
 
 from spatial_ml import config
-from spatial_ml.data.archive_ingest import audit_firms_archives
+from spatial_ml.data.archive_ingest import (
+    _csv_member,
+    _find_source_column,
+    audit_firms_archives,
+)
 from spatial_ml.data.samples import TrainingSample, build_training_sample
 from spatial_ml.pipeline.overlap import generate_overlap_dataset
 
-_ARCHIVE_ORDER = {
-    "MODIS": ("849514", "849541", "849531", "849545", "849584"),
-    "VIIRS": ("849515", "849542", "849532", "849546", "849585"),
-}
 _DISTANCE_EDGES = np.arange(0.0, 1000.0 + 50.0, 50.0)
 _TIME_EDGES = np.arange(0.0, 30.0 + 1.0, 1.0)
 _REQUIRED_NORMALIZED_FIELDS = {
@@ -43,8 +43,6 @@ _REQUIRED_NORMALIZED_FIELDS = {
     "source_row_number",
     "source_record_fingerprint",
 }
-_SENTINEL = object()
-
 
 def _atomic_json(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,10 +79,48 @@ def _archive_code(path: Path) -> str:
     return match.group(1)
 
 
-def _ordered_archives(archive_paths: Sequence[str | Path]) -> Dict[str, List[Path]]:
-    grouped: Dict[str, Dict[str, Path]] = {"MODIS": {}, "VIIRS": {}}
+def _expand_archive_paths(archive_paths: Sequence[str | Path]) -> List[Path]:
+    """Turn folders into the MODIS and Suomi-NPP VIIRS archives they contain."""
+    paths: List[Path] = []
     for value in archive_paths:
         path = Path(value)
+        if not path.is_dir():
+            paths.append(path)
+            continue
+        for candidate in sorted(path.rglob("DL_FIRE_*.zip")):
+            try:
+                _archive_sensor(candidate)
+            except ValueError:
+                # e.g. NOAA-20 (J1V-C2) downloads, which this pipeline
+                # does not train on.
+                print(f"Skipping unsupported archive: {candidate.name}")
+                continue
+            paths.append(candidate)
+    return paths
+
+
+def _first_acquisition_date(path: Path) -> date:
+    member = _csv_member(path)
+    with zipfile.ZipFile(path) as archive, archive.open(member) as stream:
+        first_row = pd.read_csv(stream, dtype=str, nrows=1)
+    column = _find_source_column(list(first_row.columns), "date")
+    if column is None or first_row.empty:
+        raise ValueError(f"Cannot read the first acquisition date of {path.name}.")
+    parsed = pd.to_datetime(first_row[column].iloc[0], errors="coerce")
+    if pd.isna(parsed):
+        raise ValueError(f"{path.name} starts with an invalid acquisition date.")
+    return parsed.date()
+
+
+def _ordered_archives(archive_paths: Sequence[str | Path]) -> Dict[str, List[Path]]:
+    """Group archives by sensor and sort each group by its first date.
+
+    FIRMS request numbers carry no meaning, so the order comes from the data
+    itself. MODIS archives that end before the first VIIRS acquisition are
+    left out because there is nothing to match them against.
+    """
+    grouped: Dict[str, Dict[str, Path]] = {"MODIS": {}, "VIIRS": {}}
+    for path in _expand_archive_paths(archive_paths):
         if not path.is_file():
             raise FileNotFoundError(f"FIRMS archive does not exist: {path}")
         sensor = _archive_sensor(path)
@@ -93,15 +129,68 @@ def _ordered_archives(archive_paths: Sequence[str | Path]) -> Dict[str, List[Pat
             raise ValueError(f"Duplicate {sensor} archive code {code}.")
         grouped[sensor][code] = path
 
-    ordered = {}
-    for sensor, codes in _ARCHIVE_ORDER.items():
-        if set(grouped[sensor]) != set(codes):
+    for sensor in ("MODIS", "VIIRS"):
+        if not grouped[sensor]:
+            raise ValueError(f"No {sensor} FIRMS archives were provided.")
+
+    starts: Dict[Path, date] = {}
+    ordered: Dict[str, List[Path]] = {}
+    for sensor in ("MODIS", "VIIRS"):
+        for path in grouped[sensor].values():
+            starts[path] = _first_acquisition_date(path)
+        ordered[sensor] = sorted(
+            grouped[sensor].values(), key=lambda item: (starts[item], item.name)
+        )
+        sensor_starts = [starts[path] for path in ordered[sensor]]
+        if len(set(sensor_starts)) != len(sensor_starts):
             raise ValueError(
-                f"Expected archive codes {codes} for {sensor}; found "
-                f"{tuple(sorted(grouped[sensor]))}."
+                f"Two {sensor} archives start on the same acquisition date."
             )
-        ordered[sensor] = [grouped[sensor][code] for code in codes]
+
+    first_viirs_day = starts[ordered["VIIRS"][0]]
+    modis = ordered["MODIS"]
+    keep_from = 0
+    for index in range(1, len(modis)):
+        # Consecutive yearly requests share their boundary date, so the
+        # previous archive ends where this one starts.
+        if starts[modis[index]] <= first_viirs_day:
+            keep_from = index
+    for skipped in modis[:keep_from]:
+        print(f"Not used for matching (before VIIRS began): {skipped.name}")
+    ordered["MODIS"] = modis[keep_from:]
     return ordered
+
+
+def _paired_days(
+    modis_days: Iterator[Tuple[date, pd.DataFrame]],
+    viirs_days: Iterator[Tuple[date, pd.DataFrame]],
+    unpaired: Dict[str, List[str]],
+) -> Iterator[Tuple[date, pd.DataFrame, pd.DataFrame]]:
+    """Yield the dates that both sensors cover, in order.
+
+    A date seen by only one sensor (a satellite outage, or MODIS before the
+    first VIIRS acquisition) cannot be matched. It is recorded in `unpaired`
+    and skipped instead of stopping the whole run.
+    """
+    modis_item = next(modis_days, None)
+    viirs_item = next(viirs_days, None)
+    while modis_item is not None and viirs_item is not None:
+        if modis_item[0] == viirs_item[0]:
+            yield modis_item[0], modis_item[1], viirs_item[1]
+            modis_item = next(modis_days, None)
+            viirs_item = next(viirs_days, None)
+        elif modis_item[0] < viirs_item[0]:
+            unpaired["modis_only"].append(modis_item[0].isoformat())
+            modis_item = next(modis_days, None)
+        else:
+            unpaired["viirs_only"].append(viirs_item[0].isoformat())
+            viirs_item = next(viirs_days, None)
+    while modis_item is not None:
+        unpaired["modis_only"].append(modis_item[0].isoformat())
+        modis_item = next(modis_days, None)
+    while viirs_item is not None:
+        unpaired["viirs_only"].append(viirs_item[0].isoformat())
+        viirs_item = next(viirs_days, None)
 
 
 def _archive_signature(archives: Mapping[str, Sequence[Path]]) -> List[Dict[str, object]]:
@@ -836,8 +925,14 @@ def run_real_m3_m4(
     chunksize: int = 100_000,
     time_tolerance_minutes: float = config.DEFAULT_TIME_TOLERANCE_MINUTES,
     spatial_radius_m: float = config.SPATIAL_MATCH_RADIUS_M,
+    year: Optional[int] = None,
 ) -> Dict[str, object]:
-    """Run M2 normalization, then resumable monthly M3 matching and M4 samples."""
+    """Run M2 normalization, then resumable monthly M3 matching and M4 samples.
+
+    With ``year`` set, only acquisition dates in that calendar year are
+    matched. Each year then needs its own ``output_dir``, which lets several
+    years be processed at the same time by separate processes.
+    """
     archives = _ordered_archives(archive_paths)
     if isinstance(chunksize, bool) or chunksize < 1:
         raise ValueError("chunksize must be a positive integer.")
@@ -866,6 +961,19 @@ def run_real_m3_m4(
         "environmental_data_status": "unavailable_no_local_rasters",
         "region_summary_definition": "10-degree latitude/longitude bins",
     }
+    if year is not None:
+        run_configuration["year"] = int(year)
+        # Yearly requests run November to November, so a calendar year sits
+        # in the archive that starts the year before and the one that starts
+        # in the year itself. Only those files need to be read.
+        for sensor in ("MODIS", "VIIRS"):
+            normalized[sensor] = [
+                normalized_path
+                for archive_path, normalized_path in zip(
+                    archives[sensor], normalized[sensor]
+                )
+                if _first_acquisition_date(archive_path).year in (year - 1, year)
+            ]
     if destination.exists():
         if not manifest_path.is_file():
             raise FileExistsError(
@@ -914,23 +1022,19 @@ def run_real_m3_m4(
     viirs_days = iter_normalized_days(
         normalized["VIIRS"], "VIIRS", chunksize=chunksize
     )
-    iterators = zip_longest(modis_days, viirs_days, fillvalue=_SENTINEL)
+    unpaired_days: Dict[str, List[str]] = {"modis_only": [], "viirs_only": []}
     current_month: Optional[str] = None
     current_summary: Optional[Dict[str, object]] = None
     current_writers: Optional[_MonthWriters] = None
     try:
-        for modis_item, viirs_item in iterators:
-            if modis_item is _SENTINEL or viirs_item is _SENTINEL:
-                raise ValueError(
-                    "MODIS and VIIRS archives do not cover the same acquisition dates."
-                )
-            modis_day, modis_records = modis_item
-            viirs_day, viirs_records = viirs_item
-            if modis_day != viirs_day:
-                raise ValueError(
-                    f"Sensor date coverage differs: MODIS {modis_day}, "
-                    f"VIIRS {viirs_day}."
-                )
+        for modis_day, modis_records, viirs_records in _paired_days(
+            modis_days, viirs_days, unpaired_days
+        ):
+            if year is not None:
+                if modis_day.year < year:
+                    continue
+                if modis_day.year > year:
+                    break
             month = modis_day.strftime("%Y-%m")
             if month in completed_months:
                 continue
@@ -960,10 +1064,12 @@ def run_real_m3_m4(
 
                 current_month = month
                 month_dir = destination / month
-                if month_dir.exists() and any(month_dir.iterdir()):
-                    raise FileExistsError(
-                        f"Untracked or partial monthly output exists: {month_dir}"
-                    )
+                if month_dir.exists():
+                    # Left behind by a run that was stopped before it could
+                    # record the month as finished. Keep it aside and redo it.
+                    set_aside = destination / f".unfinished-{month}-{os.getpid()}"
+                    os.replace(month_dir, set_aside)
+                    print(f"Redoing {month}: earlier unfinished output moved to {set_aside.name}")
                 current_summary = _new_month_summary(month)
                 current_writers = _MonthWriters(destination, month)
 
@@ -1011,9 +1117,28 @@ def run_real_m3_m4(
         raise
 
     expected_months = set(manifest["month_summaries"])
+    if not expected_months and year is not None:
+        # Nothing to match in this calendar year (for example the year after
+        # the last archive starts). Record that and stop cleanly.
+        manifest["status"] = "complete"
+        manifest["summary"] = {"months": 0, "m4_sample_count": 0}
+        _atomic_json(manifest_path, manifest)
+        return manifest
     if not expected_months:
         raise ValueError("No matching dates were processed from the archives.")
+    if year is not None:
+        for key in ("modis_only", "viirs_only"):
+            unpaired_days[key] = [
+                day for day in unpaired_days[key] if day.startswith(f"{year}-")
+            ]
     manifest["status"] = "complete"
+    manifest["unpaired_days"] = {
+        "note": "dates covered by only one sensor; they are not matched",
+        "modis_only_count": len(unpaired_days["modis_only"]),
+        "viirs_only_count": len(unpaired_days["viirs_only"]),
+        "modis_only": unpaired_days["modis_only"],
+        "viirs_only": unpaired_days["viirs_only"],
+    }
     manifest["summary"] = _aggregate_summaries(manifest["month_summaries"])
     _atomic_json(manifest_path, manifest)
     return manifest
@@ -1048,6 +1173,11 @@ def _parser() -> argparse.ArgumentParser:
         type=float,
         default=config.SPATIAL_MATCH_RADIUS_M,
     )
+    parser.add_argument(
+        "--year",
+        type=int,
+        help="only match this calendar year (use a separate --output-dir per year)",
+    )
     return parser
 
 
@@ -1061,6 +1191,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             chunksize=arguments.chunk_size,
             time_tolerance_minutes=arguments.time_tolerance_minutes,
             spatial_radius_m=arguments.spatial_radius_m,
+            year=arguments.year,
         )
     except (FileNotFoundError, FileExistsError, OSError, ValueError, RuntimeError) as exc:
         _parser().error(str(exc))

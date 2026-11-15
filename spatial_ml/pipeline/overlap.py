@@ -342,7 +342,11 @@ def generate_overlap_dataset(
     pair_rows: List[Dict[str, object]] = []
     candidate_rows: List[Dict[str, object]] = []
     search_radius = _candidate_search_radius(radius)
-    for _, modis_record in modis.iterrows():
+    # Plain dictionaries are much faster to read row by row than DataFrame
+    # rows, and a global day has tens of thousands of rows.
+    modis_rows = modis.to_dict("records")
+    viirs_rows = viirs.to_dict("records")
+    for modis_record in modis_rows:
         pair = _empty_pair_record(modis_record)
         day_index = viirs_by_day.get(modis_record["datetime"].date())
         matches = []
@@ -356,7 +360,7 @@ def generate_overlap_dataset(
                 modis_unit, search_radius, eps=0.0
             )
             for local_index in local_candidates:
-                viirs_record = viirs.loc[positions[local_index]]
+                viirs_record = viirs_rows[positions[local_index]]
                 time_difference = abs(
                     (
                         viirs_record["datetime"] - modis_record["datetime"]

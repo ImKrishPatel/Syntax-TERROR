@@ -79,3 +79,15 @@ __marimo__/
 /results/**
 !/results/**/
 !/results/**/.gitkeep
+
+# FIRMS data and everything generated from it (too large for GitHub)
+data/raw/**/*.zip
+data/raw/**/*.part
+data/processed/**
+!data/processed/**/
+!data/processed/**/.gitkeep
+data/overlap/**
+!data/overlap/.gitkeep
+models/**
+!models/.gitkeep
+full_training_status.txt

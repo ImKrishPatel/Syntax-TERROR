@@ -80,9 +80,19 @@ def _csv_member(archive_path: Path) -> str:
             ]
     except (OSError, zipfile.BadZipFile) as exc:
         raise ValueError(f"Cannot open FIRMS ZIP archive {archive_path}: {exc}") from exc
+    if len(members) > 1:
+        # The newest FIRMS requests ship two CSVs: the standard-quality
+        # "fire_archive" file and a "fire_nrt" file with the last few months
+        # of near-real-time detections. Only the standard file is used.
+        members = [
+            member
+            for member in members
+            if not Path(member).name.lower().startswith("fire_nrt_")
+        ]
     if len(members) != 1:
         raise ValueError(
-            f"Expected exactly one CSV in {archive_path.name}; found {len(members)}."
+            f"Expected exactly one standard CSV in {archive_path.name}; "
+            f"found {len(members)}."
         )
     return members[0]
 

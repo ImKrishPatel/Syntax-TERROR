@@ -206,10 +206,12 @@ def _split_for_strategy(
     strategy: str,
     block_size_m: float,
     random_seed: int,
+    train_end: str = "2018",
+    validation_end: str = "2019",
 ):
     kwargs: Dict[str, object] = {"random_seed": random_seed}
     if strategy in {"temporal", "combined"}:
-        kwargs.update({"train_end": "2018", "validation_end": "2019"})
+        kwargs.update({"train_end": train_end, "validation_end": validation_end})
     if strategy in {"spatial", "combined"}:
         kwargs["block_size_m"] = block_size_m
     return create_evaluation_split(samples, strategy, **kwargs)
@@ -228,6 +230,8 @@ def train_real_models(
     cnn_ensemble_size: int = 3,
     device: Optional[str] = "auto",
     strategies: Sequence[str] = ("temporal", "spatial", "combined"),
+    train_end: str = "2018",
+    validation_end: str = "2019",
 ) -> Dict[str, object]:
     """Train both models on a reproducible year-stratified real M4 subset."""
     for name, value in (
@@ -244,7 +248,15 @@ def train_real_models(
         raise ValueError("Select temporal, spatial, and/or combined strategies.")
 
     source = Path(sample_dir)
-    sample_paths = sorted(source.glob("????-??/training_samples.npz"))
+    # Shards sit directly in monthly folders, or one level down when the
+    # matching was run one calendar year at a time (year_2012/2012-01/...).
+    sample_paths = sorted(
+        [
+            *source.glob("????-??/training_samples.npz"),
+            *source.glob("*/????-??/training_samples.npz"),
+        ],
+        key=lambda path: path.parent.name,
+    )
     if not sample_paths:
         raise FileNotFoundError(f"No partitioned M4 sample shards found in {source}.")
     results = Path(results_dir)
@@ -301,7 +313,12 @@ def train_real_models(
     for strategy in dict.fromkeys(strategies):
         try:
             split = _split_for_strategy(
-                selected, strategy, block_size_m, random_seed
+                selected,
+                strategy,
+                block_size_m,
+                random_seed,
+                train_end=train_end,
+                validation_end=validation_end,
             )
         except ValueError as exc:
             manifest["strategies"][strategy] = {
@@ -470,6 +487,16 @@ def _parser() -> argparse.ArgumentParser:
         choices=("temporal", "spatial", "combined"),
         default=("temporal", "spatial", "combined"),
     )
+    parser.add_argument(
+        "--train-end",
+        default="2018",
+        help="last year (or date) used for training in the temporal splits",
+    )
+    parser.add_argument(
+        "--validation-end",
+        default="2019",
+        help="last year (or date) used for validation; later samples are the test set",
+    )
     return parser
 
 
@@ -488,6 +515,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cnn_ensemble_size=arguments.cnn_ensemble_size,
             device=arguments.device,
             strategies=arguments.strategies,
+            train_end=arguments.train_end,
+            validation_end=arguments.validation_end,
         )
     except (FileNotFoundError, FileExistsError, OSError, ValueError, RuntimeError) as exc:
         _parser().error(str(exc))
