@@ -125,28 +125,6 @@ shriya_backend/data/selected_calibration_dates.csv
 shriya_backend/data/frp_matching_temp/
 .env
 
-# ==========================================
-# API KEYS AND SECRET CREDENTIALS
-# ==========================================
-
-.env
-.env.*
-!.env.example
-
-# API credentials and private keys
-secrets/
-credentials/
-*.secret
-*.pem
-*.key
-service-account*.json
-google-credentials*.json
-
-# Python environment and cache
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-
-# Local development settings
-.vscode/
+# ===================================
+# forecast pipeline data
+src/data/

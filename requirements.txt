@@ -12,3 +12,7 @@ fastapi
 uvicorn[standard]
 google-genai
 python-dotenv
+# forecast (src/xgboost_model.py)
+pyarrow>=15.0.0
+duckdb>=1.1.0
+xgboost>=2.1.0
