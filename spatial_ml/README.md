@@ -331,6 +331,122 @@ screening diagnostics, not guarantees of support. Global completeness is not
 inferred from a bounding box or successful processing. No historical MODIS
 observations or M8 predictions are currently present in this repository.
 
+## Team integration exports
+
+`spatial_ml.exports` provides four CSV products for integration. It reuses the
+existing FIRMS loaders/cleaner, M3 observation IDs and candidate matcher, and
+M8 prediction CSVs; it does not download data, rerun inference, aggregate
+observations, or change the scientific target.
+
+| Product | Default filename | Meaning |
+| --- | --- | --- |
+| `modis` | `modis_observations.csv` | Cleaned, observed MODIS records. |
+| `viirs` | `viirs_observations.csv` | Cleaned, observed VIIRS records. |
+| `matched` | `modis_viirs_matched.csv` | Every valid MODIS–VIIRS candidate relationship plus unmatched MODIS records. |
+| `probabilities` | `fine_scale_fire_probability.csv` | Existing M8 model-estimated per-cell probability records. |
+
+Observed-sensor CSVs include a stable normalized `observation_id`, the
+original source identifier when provided, sensor-specific satellite and
+instrument fields, source confidence/FRP values, source file/product/version,
+ingestion timestamp, quality flags, and `source_fields_json`. Unrecognized
+input columns are retained in that JSON object; normalized source columns that
+are useful for re-import are also preserved. A stable M3-derived ID is not a
+NASA source ID: an absent original identifier stays empty. MODIS and VIIRS
+confidence/FRP fields are not asserted to be interchangeable, and FRP units
+are exported only when the input contains them.
+
+The matched table retains multiple candidate pairs. `selected_nearest_match`
+marks the M3 nearest-pair choice without discarding other candidates.
+Unmatched rows have an empty VIIRS ID and an explicit `match_status`; MODIS
+records outside the observed date intersection are also retained with an
+outside-period status. Distance is in meters and absolute temporal difference
+is in seconds. The match status describes the configured M3 heuristic, not a
+scientifically validated event association.
+
+The fine-scale probability table maps M8 column names to a stable integration
+schema and includes parent observation, target cell, observation time, cell
+center and WGS84 polygon-boundary coordinates, raw and calibrated numeric
+probabilities, uncertainty, source provenance, model/preprocessing/calibration
+versions, spatial resolution, and CRS. The row key is
+`(parent_modis_id, cell_id, observation_datetime)`: cells from different
+observation times are never merged. Historical estimates remain
+`estimated=true` and `reference_observation_available=false`; they are not
+observed VIIRS detections or binary fire/no-fire labels.
+
+CSV cell boundaries are derived only when the M8 `rNN_cNN` cell IDs, parent
+coordinates, reported cell centers, and grid resolution confirm a complete
+regular local grid. GeoJSON is optional and emits one valid polygon feature
+per modeled cell, with coordinates in EPSG:4326 and the local grid CRS retained
+in feature properties. Cells crossing the antimeridian are split into valid
+MultiPolygon geometries. Inconsistent/incomplete grid geometry fails
+validation instead of being guessed. The GeoJSON is a standards-compliant
+WGS84 FeatureCollection; CRS metadata is carried as properties rather than a
+legacy top-level `crs` member.
+
+### Export CLI
+
+The default requested integration coverage is **2021-11-14 through
+2026-07-31**, configured by `TEAM_EXPORT_START_DATE` and
+`TEAM_EXPORT_END_DATE`. These dates are filters, not claims that data are
+available. Earlier data can be included by selecting earlier dates or using
+`--all-dates`. For example, export observed source products and all match
+candidates:
+
+```bash
+python -m spatial_ml.exports \
+  --products modis viirs matched \
+  --modis data/raw/modis/firms.csv \
+  --viirs data/raw/viirs/firms.csv \
+  --output-dir outputs/team_exports
+```
+
+Validate a requested source export without writing anything:
+
+```bash
+python -m spatial_ml.exports \
+  --products modis \
+  --modis data/raw/modis/firms.csv \
+  --validation-only
+```
+
+Export previously generated M8 historical predictions for 2000–2011, with
+optional polygons:
+
+```bash
+python -m spatial_ml.exports \
+  --products probabilities \
+  --probability-input outputs/historical_estimates/global/batches \
+  --start-date 2000-11-01 \
+  --end-date 2011-12-31 \
+  --geojson \
+  --output-dir outputs/team_exports/historical
+```
+
+`--probability-input` accepts one M8 CSV or a directory of
+`predictions-*.csv` batches. `--geojson` applies only to `probabilities`.
+Use `--all-dates` to remove the default date filter; do not combine it with
+`--start-date` or `--end-date`. Selected source files must exist locally; the
+CLI does not fetch NASA data. Missing files and invalid inputs produce clear
+errors rather than success-shaped empty exports. Valid empty-after-filter
+datasets produce header-only CSVs and manifest warnings.
+
+An `export_manifest.json` accompanies each writing run. It records schema
+version, generation time, output columns and row counts, date/geographic
+coverage, source files, CRS, warnings, and validation checks. CSV values are
+re-importable; structured original fields and source provenance are encoded
+as JSON columns. The manifest reports observed extent only and does not prove
+complete global coverage.
+
+The current loaders and matcher operate on in-memory tables. For very large
+global archives, run products on appropriately sized local files or regions;
+this export layer does not yet provide streaming ingestion or matching.
+
+Synthetic fixtures validate schemas, provenance retention, matching behavior,
+filtering, probability bounds, and geometry construction. They are software
+tests only and do not demonstrate real-world model accuracy. This checkout
+does not contain the requested global FIRMS observations or M8 historical
+prediction batches, so no production export or accuracy claim is available.
+
 ## Outputs
 
 The configured project folders are:
