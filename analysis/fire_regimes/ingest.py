@@ -54,44 +54,73 @@ def load_grid_csv(path):
     return out.groupby(["cell_id", "lat", "lon", "year", "month"], as_index=False).sum()
 
 
-def load_firms_raw(paths, res=0.5, min_modis_conf=30, viirs_from=2012):
-    """Read FIRMS archive CSVs into a point table (one row per detection).
+def _csv_sources(paths):
+    """Yield (name, open file) for every CSV, including CSVs inside FIRMS zips."""
+    import zipfile
+    for p in sorted(map(str, paths)):
+        if p.lower().endswith(".zip"):
+            with zipfile.ZipFile(p) as z:
+                for n in sorted(z.namelist()):
+                    if n.lower().endswith(".csv"):
+                        with z.open(n) as fh:
+                            yield f"{p}:{n}", fh
+        else:
+            with open(p, "rb") as fh:
+                yield p, fh
 
-    Filters: low confidence, and static sources / volcanoes / offshore via the
-    "type" column when it exists. Archive files without "type" are handled
-    later by the persistent-heat filter in features.py.
-    Returns columns: cell_id, lat, lon, date, frp, is_night, is_estimated.
+
+def load_firms_raw(paths, res=0.5, min_modis_conf=30, viirs_from=2012, sensor=None, chunksize=2_000_000):
+    """Stream FIRMS archive CSVs / zips into a cell-day table.
+
+    Never holds the raw points in memory: each chunk is filtered (confidence,
+    FIRMS "type"), snapped to the grid and summed per cell and day.
+    Files from overlapping requests (e.g. 2015-16 and 2016-21) would double
+    count, so any day already covered by an earlier file is skipped.
+    sensor: "MODIS" or "VIIRS" to keep one instrument (mixing both double counts).
+    Returns columns: cell_id, lat, lon, date, count, frp, night, est_count.
     """
-    frames = []
-    for p in paths:
-        df = pd.read_csv(p, low_memory=False)
-        df.columns = [c.lower() for c in df.columns]
-        if "type" in df.columns:
-            df = df[df["type"].isin(FIRMS_KEEP_TYPES)]
-        conf = df["confidence"]
-        if pd.api.types.is_numeric_dtype(conf):          # MODIS: 0-100
-            df = df[conf >= min_modis_conf]
-        else:                                             # VIIRS: l / n / h
-            df = df[conf.astype(str).str.lower().isin(VIIRS_KEEP_CONF)]
-        instr = str(df.get("instrument", pd.Series(["?"])).iloc[0]).upper() if len(df) else "?"
-        frames.append(pd.DataFrame({
-            "lat": df["latitude"].astype(float),
-            "lon": df["longitude"].astype(float),
-            "date": pd.to_datetime(df["acq_date"]),
-            "frp": df["frp"].astype(float),
-            "is_night": df.get("daynight", "D").astype(str).str.upper().eq("N"),
-            "sensor": instr,
-        }))
-    pts = pd.concat(frames, ignore_index=True)
-    pts["lat"], pts["lon"] = snap(pts["lat"], res), snap(pts["lon"], res)
-    pts["cell_id"] = cell_id(pts["lat"], pts["lon"])
-    # MODIS-only years count as "estimated" for the trust flags, matching the app
-    pts["is_estimated"] = pts["date"].dt.year < viirs_from
-    return pts
+    cols = ["latitude", "longitude", "acq_date", "frp", "confidence", "daynight", "type", "instrument"]
+    covered, parts, seen_instr = set(), [], set()
+    for name, fh in _csv_sources(paths):
+        file_dates, n_in, n_kept = set(), 0, 0
+        for ch in pd.read_csv(fh, usecols=lambda c: c.lower() in cols, chunksize=chunksize, low_memory=False):
+            ch.columns = [c.lower() for c in ch.columns]
+            n_in += len(ch)
+            instr = ch["instrument"].astype(str).str.upper() if "instrument" in ch else pd.Series("?", index=ch.index)
+            seen_instr |= set(instr.unique())
+            if sensor:
+                ch, instr = ch[instr.eq(sensor.upper())], instr[instr.eq(sensor.upper())]
+            if "type" in ch:
+                ch = ch[ch["type"].isin(FIRMS_KEEP_TYPES)]
+            conf = ch["confidence"]
+            num = pd.to_numeric(conf, errors="coerce")
+            keep = num.ge(min_modis_conf) | conf.astype(str).str.lower().isin(VIIRS_KEEP_CONF)
+            ch = ch[keep]
+            file_dates |= set(ch["acq_date"].unique())
+            ch = ch[~ch["acq_date"].isin(covered)]
+            if ch.empty:
+                continue
+            lat, lon = snap(ch["latitude"], res), snap(ch["longitude"], res)
+            d = pd.DataFrame({"lat": lat, "lon": lon, "date": ch["acq_date"].to_numpy(),
+                              "count": 1.0, "frp": ch["frp"].astype(float).to_numpy(),
+                              "night": ch["daynight"].astype(str).str.upper().eq("N").to_numpy().astype(float)})
+            n_kept += len(d)
+            parts.append(d.groupby(["lat", "lon", "date"], as_index=False).sum())
+        covered |= file_dates
+        print(f"    {name.split('/')[-1]}: {n_in:,} rows, {n_kept:,} kept")
+    if len({i for i in seen_instr if i in ("MODIS", "VIIRS")}) > 1 and not sensor:
+        raise ValueError("Files mix MODIS and VIIRS; pass --sensor MODIS or --sensor VIIRS to avoid double counting")
+    day = pd.concat(parts).groupby(["lat", "lon", "date"], as_index=False).sum()
+    day["date"] = pd.to_datetime(day["date"])
+    day["cell_id"] = cell_id(day["lat"], day["lon"])
+    # A MODIS-only record is one sensor throughout: nothing is "estimated" and
+    # 2012 is not a sensor change. Mixed/VIIRS records flag pre-2012 like the app.
+    only_modis = sensor == "MODIS" or seen_instr <= {"MODIS", "?"}
+    day["est_count"] = 0.0 if only_modis else np.where(day["date"].dt.year < viirs_from, day["count"], 0.0)
+    return day
 
 
-def points_to_monthly(pts):
-    g = pts.assign(year=pts["date"].dt.year, month=pts["date"].dt.month,
-                   count=1.0, est_count=pts["is_estimated"].astype(float))
+def points_to_monthly(day):
+    g = day.assign(year=day["date"].dt.year, month=day["date"].dt.month)
     return (g.groupby(["cell_id", "lat", "lon", "year", "month"], as_index=False)
              [["count", "frp", "est_count"]].sum())

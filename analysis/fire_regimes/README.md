@@ -7,12 +7,18 @@ Groups grid cells with similar fire behaviour into named regimes, and flags cell
 ```bash
 pip install -r analysis/requirements.txt
 python -m analysis.fire_regimes.run                          # from public/data/hotspots.csv
-python -m analysis.fire_regimes.run --firms modis.csv viirs.csv   # raw FIRMS archive CSVs
+python -m analysis.fire_regimes.run --firms data/*.zip data/*.csv --sensor MODIS --cache cellday.pkl
+                                                             # raw FIRMS archive zips/CSVs, one sensor
 python -m analysis.fire_regimes.test_synthetic               # sanity test, should pass
 ```
 
 Writes `public/data/fire_regimes.geojson` and `public/data/regime_summary.json`.
 Re-run it whenever `hotspots.csv` is replaced with real data.
+
+FIRMS files are streamed in chunks (global data is fine on ~8 GB RAM). Overlapping requests are handled: a day
+already covered by an earlier file is skipped. Mixing MODIS and VIIRS without `--sensor` is refused, because it
+double counts. `--cache` saves the cell-day table so re-runs skip reading the raw files. `--end 2026-11` marks
+where a partial last year stops (auto-detected otherwise).
 Note: `node scripts/make-mock-data.mjs` overwrites `fire_regimes.geojson` with mock boxes, so run this after it.
 
 ## Pipeline

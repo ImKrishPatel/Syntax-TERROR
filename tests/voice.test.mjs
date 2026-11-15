@@ -26,10 +26,10 @@ test('commands force speech and dispatch year, month, anomaly, summary and order
  globalThis.window={speechSynthesis:{}}
  globalThis.Option=class{constructor(label,value){this.value=value;this.text=label}}
  get('audioSpeed').value='1';get('audioVolume').value='0.6';get('audioMode').value='activity'
- const plays=[];let voice;let panel;let focused=null;let mode='amount'
+ const plays=[];let voice;let panel;let focused=null;let mode='amount';let opened=0;let voiceStarts=0
  const table={years:[2023,2024],metric:'count',value:[Array(12).fill(10),Array(12).fill(20)],score:[Array(12).fill(0),[0,0,0,1,0,3,0,0,2.5,0,0,0]],estimatedShare:[Array(12).fill(0),Array(12).fill(0)],usual:Array.from({length:12},()=>({years:2,sd:3,mean:15}))}
  const update=()=>panel.update(table,focused,`same-area-${table.metric}`,true,mode)
- panel=createListeningPanel({onPick:(year,month)=>{focused={year,month};update()},onHighlight(){},onMode:newMode=>{panel.stop();mode=newMode;update()},onMetric:metric=>{panel.stop();table.metric=metric;update()},audioPlayer:{stop(){},ready:async()=>{},play:async options=>{plays.push(options);return true}},microphoneFactory:options=>{voice=options;return {cancel(){}}}})
+ panel=createListeningPanel({onOpen:()=>{opened++},onVoiceStart:()=>{voiceStarts++},onPick:(year,month)=>{focused={year,month};update()},onHighlight(){},onMode:newMode=>{panel.stop();mode=newMode;update()},onMetric:metric=>{panel.stop();table.metric=metric;update()},audioPlayer:{stop(){},ready:async()=>{},play:async options=>{plays.push(options);return true}},microphoneFactory:options=>{voice=options;return {cancel(){}}}})
  update()
  await voice.onCommand(parseVoiceCommand('2024 Activity'))
  assert.equal(plays.length,12);assert.ok(plays.every(p=>p.speech));assert.match(plays[0].text,/January 2024/);assert.match(plays[11].text,/December 2024/)
@@ -67,9 +67,9 @@ test('commands force speech and dispatch year, month, anomaly, summary and order
  }
  plays.length=0
  await voice.onCommand(parseVoiceCommand('Keyword Guide'))
- assert.equal(plays.length,KEYWORD_GUIDE.length);assert.ok(plays.every(p=>p.speech && p.frequencies.length===0));assert.equal(get('keywordGuide').open,true);assert.equal(get('audioPanel').hidden,false)
+ assert.equal(plays.length,KEYWORD_GUIDE.length);assert.ok(plays.every(p=>p.speech && p.frequencies.length===0));assert.equal(get('keywordGuide').open,true);assert.equal(opened,1)
  plays.length=0
- const oldFocus={...focused};voice.onStart();await voice.onCommand(parseVoiceCommand('Leave'))
+ const oldFocus={...focused};voice.onStart();assert.equal(voiceStarts,1);await voice.onCommand(parseVoiceCommand('Leave'))
  assert.equal(plays.length,0);assert.deepEqual(focused,oldFocus);assert.match(get('voiceStatus').textContent,/cancelled/)
  plays.length=0
  await voice.onCommand(parseVoiceCommand('1999 Activity'))

@@ -81,5 +81,58 @@ def test():
     assert shift_rate > 0.7 and false_shift < 0.05
 
 
+
+
+def make_firms(d):
+    """Fake FIRMS archive files: a zip (2016-2021) and a CSV (2015-2016) that
+    overlap in 2016, plus gas flares and low-confidence rows to be filtered."""
+    import zipfile
+    r = np.random.default_rng(2)
+    rows = []
+    for day in pd.date_range("2015-01-01", "2024-12-31"):
+        m = day.month - 1
+        # boreal summer wildfire block: big, night-burning, Jun-Aug
+        for _ in range(r.poisson(40 * bump(6, 0.9)[m])):
+            rows.append((56 + r.uniform(0, 4), -120 + r.uniform(0, 4), day, r.lognormal(4.3, 0.9), 80, "N" if r.random() < .45 else "D", 0))
+        # crop burning block: small, daytime, Apr and Oct
+        for _ in range(r.poisson(60 * (bump(3, 0.4) + bump(9, 0.4))[m])):
+            rows.append((29 + r.uniform(0, 3), 74 + r.uniform(0, 3), day, r.lognormal(2.5, 0.3), 70, "N" if r.random() < .05 else "D", 0))
+        rows.append((29.9, 50.1, day, 30.0, 90, "N", 2))                   # gas flare -> dropped
+        rows.append((57.0, -118.0, day, 900.0, 10, "D", 0))                  # low confidence -> dropped
+    df = pd.DataFrame(rows, columns=["latitude", "longitude", "acq_date", "frp", "confidence", "daynight", "type"])
+    df["acq_date"] = df["acq_date"].dt.strftime("%Y-%m-%d")
+    df["instrument"], df["acq_time"], df["satellite"] = "MODIS", 1200, "Terra"
+    yr = df["acq_date"].str[:4].astype(int)
+    df[yr <= 2016].to_csv(Path(d) / "fire_archive_M-C61_1.csv", index=False)
+    with zipfile.ZipFile(Path(d) / "DL_FIRE_M-C61_2.zip", "w") as z:
+        z.writestr("fire_archive_M-C61_2.csv", df[yr >= 2016].to_csv(index=False))
+    v = df.head(5).assign(instrument="VIIRS", confidence="n")
+    v.to_csv(Path(d) / "fire_archive_SV-C2_3.csv", index=False)
+    return int(((df["type"] == 0) & (df["confidence"] >= 30)).sum())
+
+
+def test_firms():
+    from . import ingest
+    with tempfile.TemporaryDirectory() as d:
+        expected = make_firms(d)
+        modis = [str(Path(d) / "fire_archive_M-C61_1.csv"), str(Path(d) / "DL_FIRE_M-C61_2.zip")]
+        day = ingest.load_firms_raw(modis)
+        print(f"\nkept {day['count'].sum():,.0f} detections, expected {expected:,} (overlap removed once)")
+        assert day["count"].sum() == expected
+        assert not ((day["lat"] == 29.75) & (day["lon"] == 50.25)).any(), "gas flare kept"
+        try:
+            ingest.load_firms_raw(modis + [str(Path(d) / "fire_archive_SV-C2_3.csv")])
+            raise AssertionError("mixed sensors not caught")
+        except ValueError as e:
+            print("mixed sensors caught:", e)
+        main(["--firms", *modis, "--out", d])
+        summ = json.loads((Path(d) / "regime_summary.json").read_text())
+        for r in summ["regimes"]:
+            print(f"  {r['regime_name']:<60} night_share={r['profile'].get('night_share')}")
+        arch = {r["archetype"] for r in summ["regimes"]}
+        assert "agricultural" in arch and arch & {"high_intensity", "seasonal_wildfire"}, arch
+
+
 if __name__ == "__main__":
     test()
+    test_firms()

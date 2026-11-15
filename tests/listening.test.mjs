@@ -5,7 +5,7 @@ const table={years:[2023],metric:'count',value:[[0,100,NaN,...Array(9).fill(2)]]
 test('coverage overrides zeros; missing months remain missing',()=>{
  assert.equal(listeningMonths(table,2023,false)[0].status,'missing')
  const months=listeningMonths(table,2023)
- assert.match(describeMonth(months[0]),/0 harmonized hotspots/)
+ assert.match(describeMonth(months[0]),/0 hotspots/)
  assert.match(describeMonth(months[2]),/No data available/)
  assert.match(seasonSummary(months),/incomplete year/)
 })

@@ -5,7 +5,7 @@ import { formatValue, formatNumber } from './stats.js'
 import { showTip, hideTip } from './tooltip.js'
 
 const YEAR_COLOR = '#D6531F'   // the selected year
-const USUAL_COLOR = '#56665E'  // the usual year
+const USUAL_COLOR = '#9AA8A0'  // the usual year
 
 // round the top of the y axis up to a tidy number, and say how many equal
 // steps divide it into round numbers. Returns [top, steps].

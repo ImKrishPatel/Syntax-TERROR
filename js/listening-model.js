@@ -16,7 +16,7 @@ export function describeMonth(m) {
   const name = `${MONTHS[m.month]} ${m.year}.`
   if (m.status === 'missing') return `${name} No data available. This does not mean zero activity.`
   const amount = m.activity.toLocaleString('en-CA', { maximumFractionDigits: 1 })
-  const unit = m.metric === 'frp' ? 'megawatts of summed fire radiative power' : 'harmonized hotspots'
+  const unit = m.metric === 'frp' ? 'megawatts of summed fire radiative power' : 'hotspots'
   const comparison = ({above:'Above usual activity',below:'Below usual activity',typical:'Typical activity'})[m.anomaly] || 'Historical comparison unavailable'
   return `${name} ${amount} ${unit}. ${comparison}.${m.estimated ? ' Modeled estimate from MODIS.' : ''}`
 }
@@ -30,5 +30,5 @@ export function seasonSummary(months) {
   const peak = known.reduce((a,b)=>a.activity >= b.activity ? a:b)
   const unusual = known.filter(m=>m.score !== null && m.score >= 2 && m.activity>0).length
   const missing = months.length-known.length
-  return `${peak.year}. ${peak.activity === 0 ? 'No activity is recorded in the available months.' : `${MONTHS[peak.month]} had the highest recorded activity.`} ${unusual} months were at least two standard deviations above usual.${missing ? ` ${missing} months have no data; this is an incomplete year.` : ''}${known.some(m=>m.estimated) ? ' Some values are modeled estimates from MODIS.' : ''}`
+  return `${peak.year}. ${peak.activity === 0 ? 'No activity is recorded in the available months.' : `${MONTHS[peak.month]} had the highest recorded activity.`} ${unusual === 0 ? 'No month was' : unusual === 1 ? 'One month was' : `${unusual} months were`} at least two standard deviations above usual.${missing ? ` ${missing === 1 ? 'One month has' : `${missing} months have`} no data so far; this is an incomplete year.` : ''}${known.some(m=>m.estimated) ? ' Some values are modeled estimates from MODIS.' : ''}`
 }

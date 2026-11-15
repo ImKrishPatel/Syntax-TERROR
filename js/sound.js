@@ -2,9 +2,9 @@
 import { createPlayer, soundFor } from './fire-audio.js'
 import { listeningMonths, describeMonth, seasonSummary, strongestMonth } from './listening-model.js'
 import { MONTHS } from './config.js'
-import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=voice-shortcut-3'
+import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=pearl-voice-4'
 
-export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
+export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
   const $ = id => document.getElementById(id)
   const player = audioPlayer
   let table, context = '', covered = true, months = [], year, index = 0, token = 0, running = false
@@ -128,9 +128,12 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, au
       return
     }
     if(command.type==='keywords') {
-      $('audioPanel').hidden=false
-      $('listenButton').setAttribute('aria-expanded','true')
-      $('listenText').textContent='Close listening panel'
+      if(onOpen) onOpen()
+      else {
+        $('audioPanel').hidden=false
+        $('listenButton').setAttribute('aria-expanded','true')
+        $('listenText').textContent='Close listening panel'
+      }
       $('keywordGuide').open=true
       const mine=token, set=settings()
       try {
@@ -182,6 +185,7 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, au
   const microphone=microphoneFactory({
     button:$('microphoneButton'),status:$('voiceStatus'),
     onStart:()=>{
+      onVoiceStart?.()
       beforeMicrophone={speech:$('audioSpeech').checked,muted:$('audioMute').checked,volume:$('audioVolume').value}
       stop();$('audioSpeech').checked=true;$('audioMute').checked=false
       if(Number($('audioVolume').value)===0)$('audioVolume').value='0.6'

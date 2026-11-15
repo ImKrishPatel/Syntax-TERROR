@@ -190,7 +190,13 @@ export function overviewVerdict(table) {
     }
   })
 
-  let sentence = `Fire here usually peaks in ${MONTHS[peak]}.`
+  // the month with the most fire overall; it can differ from a usual year's peak when big
+  // wildfire years are rare (e.g. steady autumn farm burning, but summer wildfires some years)
+  let busiest = 0
+  table.usual.forEach((u, m) => { if (u.mean > table.usual[busiest].mean) busiest = m })
+  let sentence = busiest !== peak && by === 'median'
+    ? `In most years fire here peaks in ${MONTHS[peak]}, but the big fire years peak in ${MONTHS[busiest]}.`
+    : `Fire here usually peaks in ${MONTHS[peak]}.`
   if (table.usualYear > 0 && table.years.length > 2) {
     sentence += ` The biggest year since ${first} was ${table.years[big]}, with ${timesUsual(table.yearTotal[big], table.usualYear)} the ${table.metric === 'frp' ? 'fire energy' : 'hotspots'} of a usual year.`
   }
