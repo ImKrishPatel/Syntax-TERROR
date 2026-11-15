@@ -2,19 +2,22 @@
 
 ## Purpose
 
-This module will provide the foundation for estimating the sub-pixel
-distribution of active-fire observations at VIIRS-like spatial resolution from
-coarser MODIS observations. The current module includes local FIRMS ingestion,
-overlap matching, target-grid construction, environmental raster alignment,
-and training-sample packaging. It does not implement or train a model.
+This module estimates fine-scale fire-detection probability from coarse MODIS
+observations and environmental context, while reporting uncertainty. The
+current module includes local FIRMS ingestion, overlap matching, target-grid
+construction, environmental raster alignment, training-sample packaging, and
+a probabilistic Random Forest baseline plus a small spatial convolutional
+ensemble. No NASA data is bundled, and no historical product has been
+generated.
 
 ## Scientific problem
 
 MODIS and VIIRS observe active fires at different spatial resolutions. The
-project aims to learn how MODIS fire observations relate to finer-scale
-patterns observed by VIIRS, then apply that relationship to earlier MODIS data.
-The eventual output is a model-derived spatial estimate, not a reconstruction
-of observations that were never collected.
+project estimates the probability of observed VIIRS point occupancy in local
+target cells from MODIS observations and environmental context. This is
+probabilistic spatial estimation/downscaling, not recovery of a true
+historical 375 m VIIRS dataset or reconstruction of observations that were
+never collected.
 
 ## MODIS and VIIRS spatial resolutions
 
@@ -27,10 +30,11 @@ the source products' geolocation, projection, and observation characteristics.
 ## Overlap-period training concept
 
 The MODIS/VIIRS overlap begins in 2012. Paired observations from the overlap
-period can provide training examples for learning sub-pixel spatial patterns.
+period can provide training examples for estimating fine-scale point-detection
+probabilities.
 The overlap end year is intentionally not assumed: set
 `SPATIAL_ML_OVERLAP_END_YEAR` when a dataset-specific end year is selected.
-No training examples are included in this repository setup.
+No real training examples or NASA observations are included in this repository.
 
 ## Environmental features
 
@@ -38,24 +42,170 @@ Environmental spatial context may include elevation, slope, aspect, and land
 cover. The raster feature interface is described below; no environmental
 provider or data source is selected.
 
-## Planned model
+## Probabilistic baseline model
 
-The planned model will learn a relationship between coarse MODIS observations,
-environmental features, and finer-scale fire patterns. The specific model
-architecture has not been selected or implemented.
+The first baseline is a probabilistic Random Forest. It predicts, per target
+cell, the probability of observed VIIRS point occupancy using MODIS FRP and
+confidence, local cell position, and aligned environmental features. Missing
+numeric inputs are imputed using medians fitted on the training data only.
+Confidence labels (`low`, `nominal`, and `high`) are represented separately
+from numeric confidence values.
 
-## Validation strategy
+The target remains the Milestone 4 binary point-occupancy label: a mapped VIIRS
+point is positive; an unoccupied cell is not proof that no fire occurred.
+Samples with no in-grid positive VIIRS evidence are excluded during fitting and
+reported in a warning and `excluded_sample_ids`. This baseline does not
+reconstruct physical sensor footprints or estimate a true fire state.
 
-The future model will be evaluated against held-out real VIIRS observations
-from the overlap period. No model has been trained or validated, and no
-accuracy results are available at this stage.
+Per-cell uncertainty is the standard deviation of positive-class probabilities
+across individual trees. It is an uncalibrated ensemble-spread proxy, not a
+confidence interval or a guarantee of prediction coverage.
+
+The API is available from `spatial_ml.models`:
+
+```python
+from spatial_ml.models import ProbabilisticRandomForest
+
+model = ProbabilisticRandomForest(random_state=42).fit(training_samples)
+estimate = model.predict(sample)
+probability = estimate.probability
+uncertainty = estimate.uncertainty_std
+```
+
+`estimate.metadata` labels the output as a model estimate and records the
+target interpretation and uncertainty method. This repository does not train
+the model on NASA data or generate historical outputs.
+
+## Milestone 6 spatial probability model
+
+`ProbabilisticSpatialEnsemble` is a second, spatial-context model for the same
+observed VIIRS point-occupancy probability task as the Random Forest. It uses
+configurable small 3 × 3 convolution blocks with padding to preserve
+`[rows, columns]`, then a per-cell sigmoid output. Grid height and width default
+to the existing M4 configuration; the default 3 × 3 grid is unchanged.
+VIIRS is the observed reference label during the overlap period, not perfect
+physical-fire ground truth.
+
+The shared M5 feature builder supplies MODIS FRP, valid MODIS confidence,
+east/west and north/south cell offsets, and available environmental channels.
+The spatial tensor has shape `[channels, rows, columns]` per sample. Flattened
+M5 rows are interpreted in row-major order: row 0 is north-to-south grid row 0
+and columns proceed west-to-east. The channel list, including any missingness
+indicators, is recorded with each prediction and model artifact. VIIRS targets,
+confidence, FRP, target status, and evidence metadata are not input channels.
+
+Training requires observed binary `observed_viirs_occupancy` targets and rejects
+estimated targets. Parent MODIS samples are partitioned by
+`split_samples_by_parent`; all cells belonging to one MODIS ID stay together.
+The split helper is a reproducible random parent-level split, not a
+time/event-aware validation strategy. Timestamps and event IDs remain attached
+to samples for a later time/event-based study.
+
+For each fit, feature medians, missingness indicators, means, and scales are
+learned from training samples only. Those values are persisted and reused
+unchanged during prediction. The model trains multiple independently
+initialized small CNNs; the output is their ensemble-mean probability and the
+per-cell standard deviation across members. This is an uncalibrated ensemble
+disagreement uncertainty proxy, not a confidence interval or posterior.
+Fixed seeds support repeatable CPU tests; bitwise reproducibility across
+different PyTorch versions and hardware is not guaranteed.
+
+The shared `spatial_ml.evaluation.evaluate_probability_grids` interface
+provides Brier score, log loss, ROC-AUC and PR-AUC when both classes are
+present, plus binned reliability data that also summarizes the probability
+distribution. It evaluates probabilities but does not fit a calibration
+transform. These utilities do not constitute a real-data comparison or
+validation result.
+
+The model artifact stores architecture settings, channel names, grid
+dimensions, training-fitted preprocessing, ensemble weights/seeds, target
+definition, and parent-sample provenance. Save/load uses a weights-only
+PyTorch checkpoint. A GAN discriminator is intentionally omitted: a 3 × 3
+binary point-occupancy task does not justify adversarial image synthesis, and
+the desired output is a probability surface rather than generated VIIRS-like
+imagery.
+
+```python
+from spatial_ml.data import split_samples_by_parent
+from spatial_ml.evaluation import evaluate_probability_grids
+from spatial_ml.models import ProbabilisticSpatialEnsemble
+
+split = split_samples_by_parent(samples, random_seed=42)
+model = ProbabilisticSpatialEnsemble(random_seed=42).fit(split.train)
+estimate = model.predict(split.test[0])
+scores = evaluate_probability_grids(
+    split.test[0].target_grid, estimate.probability
+)
+model.save("models/spatial_ensemble.pt")
+```
+
+This example shows the interface only. No real NASA data was used to fit,
+calibrate, compare, or validate either model.
+
+## Milestone 7: held-out evaluation
+
+Milestone 7 adds a first leakage-resistant evaluation workflow for the
+Random Forest and spatial ensemble. Both models must be trained on the same
+parent MODIS samples and are scored on the same eligible held-out parent
+samples. Every local cell from a parent stays in its partition.
+
+Supported split strategies are:
+
+- `temporal`: inclusive training and validation end dates/years, with later
+  samples held out for testing.
+- `spatial`: deterministic equal-area EPSG:6933 spatial blocks assigned to
+  train, validation, and test.
+- `combined`: a strict time-window and spatial-block intersection. Samples
+  outside matching partition intersections are explicitly reported as dropped.
+
+Probability calibration supports Platt scaling and isotonic regression. A
+calibrator is fit from validation predictions only, records its validation
+parent IDs, and is applied once to the test probabilities. If validation
+support is insufficient, calibrated results are marked unavailable rather
+than tuned on the test data.
+
+Reports include counts and prevalence, Brier score, log loss, ROC-AUC/PR-AUC
+when defined, expected calibration error, reliability bins, parent-level Brier
+summaries, uncertainty/error and risk-versus-coverage diagnostics, and
+year/spatial-block/land-cover subgroup metrics when those groupings are
+available. Raw test probabilities, available calibrated probabilities,
+uncertainty proxies, and observed target grids are retained in a compressed
+NPZ file. JSON, Markdown, reliability CSV, and validation-fitted calibration
+artifacts accompany it. Input file hashes, split settings, feature names,
+model settings, and software versions are recorded for reproducibility.
+
+Run an evaluation using local files you provide:
+
+```bash
+python -m spatial_ml.evaluation.run_local \
+  --modis /path/to/local_modis_firms.csv \
+  --viirs /path/to/local_viirs_firms.csv \
+  --train-end 2020 \
+  --validation-end 2021 \
+  --output-dir results/milestone_7
+```
+
+The CLI accepts optional `--elevation` and `--land-cover` local rasters.
+Spatial-block evaluation additionally requires `--block-size-m`; temporal and
+combined evaluation require `--train-end` and `--validation-end`. Use
+`python -m spatial_ml.evaluation.run_local --help` for all options. The command
+does not download data. File hashes establish input identity, not NASA
+provenance or data quality.
+
+Synthetic fixtures support software tests only and are not scientific evidence
+or model-performance results. This checkout currently contains no real local
+FIRMS observations, so no real-data model comparison, calibration, or
+validation has been performed. The evaluation workflow does not produce
+historical estimates.
 
 ## Historical 2000–2011 synthesis
 
 MODIS provides the historical coarse-resolution observations for 2000–2011.
 After development and evaluation with overlap-period observations, a validated
-model may be applied to those historical MODIS observations to estimate a
-375 m fire probability or density distribution.
+model may be applied to those historical MODIS observations to produce a
+MODEL-ESTIMATED FINE-SCALE FIRE-DETECTION PROBABILITY + UNCERTAINTY product.
+Historical application is outside Milestone 6; this milestone does not create
+historical VIIRS observations or a historical VIIRS dataset.
 
 ## Outputs
 
@@ -75,9 +225,9 @@ the empty directory structure.
 ## Observed versus estimated data
 
 MODIS and VIIRS source observations must remain distinguishable from derived
-products. In particular, the estimated 375 m values for 2000–2011 are MODEL
-ESTIMATES generated from MODIS and spatial context. They must not be presented
-or labeled as actual VIIRS observations.
+products. Historical outputs must be labeled MODEL-ESTIMATED FINE-SCALE FIRE
+PROBABILITY + UNCERTAINTY. They must not be described as a recovered 375 m
+fire dataset, reconstructed VIIRS, or historical 375 m VIIRS observations.
 
 ## FIRMS ingestion and cleaning
 
@@ -202,11 +352,10 @@ python -m spatial_ml.pipeline.check_overlap_matching
 The example fixtures are synthetic and are not NASA observations. Matching is
 an observation-to-observation baseline, not a reconstruction of sensor pixel
 footprints or proof of a fire-event relationship. Preserve timestamps for
-future chronological splitting; do not randomly split nearby records from the
-same event across training and validation. This milestone only prepares
-observed overlap data for later work. The target-grid and environmental
-interfaces described below prepare sample representations only; no model
-training, validation results, or historical synthesis are implemented.
+chronological or event-based training/validation separation; do not randomly
+split nearby records from the same event across training and validation. The
+baseline model is implemented below, but no real-data validation or historical
+synthesis has been performed.
 
 ## 375 m target grids and training samples
 
@@ -276,5 +425,6 @@ Tests create tiny deterministic rasters in temporary directories, using
 synthetic values, CRS, and geotransforms; no raster fixture or NASA data is
 downloaded or committed. Grid size, resolution, projection, matching radius,
 and time tolerance are configurable starting assumptions, not scientifically
-validated thresholds. Any later 375 m historical product must be labeled as a
-MODEL ESTIMATE, never as historical observed VIIRS.
+validated thresholds. Any historical output must be labeled MODEL-ESTIMATED
+FINE-SCALE FIRE-DETECTION PROBABILITY + UNCERTAINTY, never as historical
+observed VIIRS.

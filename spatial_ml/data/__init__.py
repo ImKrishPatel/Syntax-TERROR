@@ -12,6 +12,7 @@ from .firms import (
     normalize_firms_schema,
 )
 from .samples import TrainingSample, build_training_sample
+from .splitting import ParentSampleSplit, split_samples_by_parent
 from .target_grid import (
     GridTarget,
     LocalTargetGrid,
@@ -21,6 +22,7 @@ from .target_grid import (
 __all__ = [
     "GridTarget",
     "LocalTargetGrid",
+    "ParentSampleSplit",
     "TrainingSample",
     "build_training_sample",
     "build_viirs_target_grid",
@@ -30,5 +32,6 @@ __all__ = [
     "load_viirs",
     "normalize_firms_schema",
     "quality_control_summary",
+    "split_samples_by_parent",
     "temporal_range_summary",
 ]
