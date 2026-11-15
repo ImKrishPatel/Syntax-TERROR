@@ -60,7 +60,10 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; background: var(--paper); }
+
+/* Colour inversion (Accessibility): flips every colour on the whole site, pictures and map included */
+html.is-inverted { filter: invert(1); }
 
 body {
   margin: 0;
@@ -82,6 +85,10 @@ svg { display: block; }
 [hidden] { display: none !important; }
 
 :focus-visible { outline: 2px solid var(--magenta); outline-offset: 2px; }
+
+/* shows only when reached with the Tab key */
+.skip-link { position: fixed; z-index: 3000; top: 8px; left: 8px; padding: 9px 14px; border-radius: 8px; background: var(--ink); color: var(--paper); font-weight: 600; transform: translateY(-200%); }
+.skip-link:focus { transform: none; }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -320,6 +327,34 @@ body[data-page="home"] .brand, body[data-page="home"] .search-top { visibility: 
 body.side-closed .sidebar { transform: translateX(-100%); visibility: hidden; transition: transform 0.25s ease, visibility 0s 0.25s; }
 body.side-closed .main { margin-left: 0; }
 
+/* accessibility settings: a small window beside the side menu */
+.access-panel {
+  position: fixed;
+  z-index: 1450;
+  left: calc(var(--side-w) + 4px);
+  bottom: 14px;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+body.side-closed .access-panel { left: 12px; }
+.access-panel:focus { outline: none; }
+.access-head { display: flex; align-items: center; justify-content: space-between; margin: 0 -8px 6px 0; }
+.access-head h2 { font-size: 1.2rem; font-variation-settings: var(--condensed); }
+.access-panel h3 { margin: 16px 0 8px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.access-panel .switch { padding-left: 0; color: var(--ink); font-size: 0.95rem; font-weight: 600; }
+.access-note { margin: 2px 0 10px; color: var(--ink-2); font-size: 0.82rem; line-height: 1.45; }
+.access-panel .microphone, .access-listen { display: inline-flex; align-items: center; gap: 8px; }
+.access-listen svg { width: 16px; height: 16px; }
+.shortcuts { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; font-size: 0.86rem; }
+.shortcuts dt { white-space: nowrap; }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--paper); font: inherit; font-size: 0.78rem; font-weight: 600; text-align: center; }
+
 /* ---------- 5. home ---------- */
 
 .home, .workspace { display: none; }
@@ -388,23 +423,6 @@ body[data-page="home"] .main { margin-right: 0; }
 .chip.is-favourite > .chip-remove:hover { color: var(--error); }
 .chip-remove svg { width: 10px; height: 10px; fill: none; color: inherit; }
 
-.home-nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 34px; }
-.nav-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 12px;
-  background: var(--panel);
-  font-weight: 600;
-}
-.nav-button svg { width: 17px; height: 17px; color: var(--ink-3); }
-.nav-button:hover { border-color: var(--ink); transform: translateY(-1px); }
-.nav-button.is-main { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.nav-button.is-main svg { color: inherit; }
-
-.home-settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-top: 26px; }
 .home-status { margin-top: 18px; color: var(--ink-3); font-size: 0.8rem; }
 
 /* ---------- 6. map page ---------- */
@@ -432,6 +450,8 @@ body[data-page="map"].side-closed .workspace { padding-left: var(--gap); }
 #map.over-box, #map.over-box .leaflet-interactive { cursor: move !important; }
 #map.is-moving, #map.is-moving .leaflet-interactive { cursor: grabbing !important; }
 .burn-view { filter: saturate(1.1) contrast(1.15) sepia(0.12); }
+/* the terrain map is pale as it comes: make it darker and bolder */
+.tiles-terrain { filter: saturate(1.5) contrast(1.15) brightness(0.86); }
 
 /* everything that floats on the map shares this see-through card look */
 .map-top .segmented, .area-pill, .map-key, .timebar, .map-toast {
@@ -462,8 +482,19 @@ body[data-page="map"].side-closed .workspace { padding-left: var(--gap); }
   border-radius: 12px;
   font-size: 0.8rem;
 }
-.map-key .segmented { display: flex; }
+.map-key-head { display: flex; align-items: center; gap: 4px; }
+.map-key .segmented { display: flex; flex: 1; }
 .map-key .segmented button { flex: 1; }
+.key-fold { width: 30px; height: 30px; }
+.key-fold svg { transition: transform 0.15s; }
+/* the eye button: dimmed while the squares are hidden */
+#gridToggle[aria-pressed="true"] { background: none; color: var(--ink-2); }
+#gridToggle[aria-pressed="false"] { color: var(--ink-3); opacity: 0.55; text-decoration: line-through; }
+.map-key.is-off .legend { opacity: 0.4; }
+/* folded: only the top row stays */
+.map-key.is-folded { width: auto; }
+.map-key.is-folded #mapKeyBody { display: none; }
+.map-key.is-folded .key-fold svg { transform: rotate(180deg); }
 .legend { padding: 9px 3px 2px; max-height: 36vh; overflow: auto; }
 .legend:empty { display: none; }
 .legend-title { font-weight: 650; font-size: 0.84rem; }
@@ -492,6 +523,7 @@ body[data-page="map"].side-closed .workspace { padding-left: var(--gap); }
   border-radius: 99px;
 }
 .timebar input[type="range"] { flex: 1; min-width: 0; accent-color: var(--magenta); }
+.speed { height: 28px; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--panel); font-size: 0.82rem; font-weight: 600; }
 .timebar-label { min-width: 92px; font-size: 0.86rem; font-weight: 650; white-space: nowrap; }
 .play { display: grid; place-items: center; width: 30px; height: 30px; flex: none; padding: 0; border: 0; border-radius: 50%; background: var(--magenta); color: #fff; }
 .play svg { width: 14px; height: 14px; fill: currentColor; }
@@ -520,11 +552,19 @@ body.is-plain .timebar { padding-left: 16px; }
 .map-toast.is-shown { opacity: 1; transform: translate(-50%, 0); }
 
 /* things the map library draws */
-.area-handle { width: 18px; height: 18px; border: 2px solid var(--magenta); border-radius: 3px; background: #fff; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6); cursor: grab; }
+/* the corners of the selected area: small dots. The ::after makes the grab area bigger than the dot.
+   (No position or transform here: the map library uses both to put each dot on its corner.) */
+.area-handle { width: 10px; height: 10px; border: 2px solid var(--magenta); border-radius: 50%; background: #fff; cursor: grab; }
+.area-handle::after { content: ""; position: absolute; inset: -8px; }
+.area-handle:hover { box-shadow: 0 0 0 3px var(--magenta-soft), 0 0 0 1px var(--magenta); }
 .area-handle:active { cursor: grabbing; }
 .on-dark .area-handle { border-color: #F0529F; }
 
 .leaflet-bar { border: 1px solid var(--rule-strong) !important; border-radius: 10px; box-shadow: none !important; overflow: hidden; }
+/* zoom slider: slides open between + and - when the mouse is over them */
+.zoom-slide { display: grid; place-items: center; height: 0; overflow: hidden; background: var(--panel); transition: height 0.18s ease; }
+.leaflet-control-zoom:hover .zoom-slide, .leaflet-control-zoom:has(:focus-visible) .zoom-slide, .leaflet-control-zoom.is-sliding .zoom-slide { height: 132px; border-bottom: 1px solid var(--rule); }
+.zoom-slide input { writing-mode: vertical-lr; direction: rtl; width: 18px; height: 112px; margin: 0; accent-color: var(--magenta); cursor: pointer; }
 .leaflet-bar a, .leaflet-bar a:hover { background: var(--panel); color: var(--ink); border-bottom-color: var(--rule); }
 .leaflet-container { font-family: inherit; }
 .leaflet-container .leaflet-control-attribution { padding: 0 6px; background: var(--glass); color: var(--ink-3); font-size: 9.5px; }
@@ -810,6 +850,7 @@ body.is-plain .timebar { padding-left: 16px; }
 
 /* phones: the menu slides over the page, and the panel becomes a sheet under the map */
 @media (max-width: 760px) {
+  .access-panel, body.side-closed .access-panel { left: 12px; }
   .main, body.side-closed .main { margin-left: 0; }
   .sidebar { background: var(--panel); border-right: 1px solid var(--rule-strong); box-shadow: var(--shadow); }
   body[data-page="map"] .workspace { flex-direction: column; padding: 0 8px 8px; }

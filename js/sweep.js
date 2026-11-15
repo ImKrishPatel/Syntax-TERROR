@@ -63,7 +63,8 @@ function crackle(loudness) {
 }
 
 // onStep(row, month) is called as each month plays; onDone() at the end.
-export function playCalendar(table, onStep, onDone) {
+// getSpeed() gives the speed right now (1 = normal, 2 = twice as fast), so it can change while playing.
+export function playCalendar(table, onStep, onDone, getSpeed = () => 1) {
   stopCalendar()
   audio = audio || new (window.AudioContext || window.webkitAudioContext)()
   if (audio.state === 'suspended') audio.resume()
@@ -84,7 +85,7 @@ export function playCalendar(table, onStep, onDone) {
   osc.start()
   hum = { osc, gain }
 
-  const stepTime = 95   // milliseconds per month
+  const stepTime = 95   // milliseconds per month at normal speed
   let i = 0
   const next = () => {
     if (i >= steps.length) { stopCalendar(); onStep(null, null); onDone(); return }
@@ -97,7 +98,7 @@ export function playCalendar(table, onStep, onDone) {
       note(pitch, 0.04 + 0.16 * size, 0.22)
       if (z >= CONFIG.unusualSigma) crackle(0.35 + 0.4 * size)
     }
-    timer = setTimeout(next, stepTime)
+    timer = setTimeout(next, stepTime / (getSpeed() || 1))
   }
   timer = setTimeout(next, 0)
 }

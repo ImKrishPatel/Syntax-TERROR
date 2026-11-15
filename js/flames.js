@@ -10,6 +10,7 @@
 
 const CELL = 10          // distance between squares, in pixels
 const FRAME_MS = 40      // redraw about 25 times a second
+const MOUSE_GLOW = 2.4    // how far the warmth around the mouse reaches (1 = small)
 
 // squares from "barely warm" to "hottest", for the light and the dark page
 const COLORS = {
@@ -65,7 +66,7 @@ export function startFlames(canvas) {
     }
     if (mouse) {
       const dx = x - mouse.x, dy = y - mouse.y
-      const near = Math.exp(-(dx * dx + dy * dy) / 9000)   // 1 at the pointer, fading with distance
+      const near = Math.exp(-(dx * dx + dy * dy) / (9000 * MOUSE_GLOW))   // 1 at the pointer, fading with distance
       heat += near * mouse.heat * (0.45 + 0.55 * noise(x / 30, y / 30 - time * 2))
     }
     return Math.min(1, heat)
@@ -80,7 +81,7 @@ export function startFlames(canvas) {
     const firstRow = Math.floor(height * 0.45 / CELL)
     for (let row = 0; row * CELL < height; row++) {
       const y = row * CELL + CELL / 2
-      const nearMouse = mouse && mouse.heat > 0.02 && Math.abs(y - mouse.y) < 220
+      const nearMouse = mouse && mouse.heat > 0.02 && Math.abs(y - mouse.y) < 340
       if (row < firstRow && !nearMouse) continue
       for (let col = 0; col * CELL < width; col++) {
         const x = col * CELL + CELL / 2

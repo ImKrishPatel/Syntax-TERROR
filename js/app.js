@@ -9,18 +9,18 @@
 //   - which page and panel are open (`page` and `feature`)
 //   - settings the browser remembers (`settings`: dark mode, favourites, ...)
 
-import { CONFIG, MONTHS } from './config.js'
+import { CONFIG, MONTHS } from './config.js?v=ember-12'
 import { data, loadHotspots, loadJson, monthlyTotals, cellTotals, rowsAsCsv, monthIndex, cellsInArea } from './data.js'
 import { buildTable, monthVerdict, overviewVerdict, formatValue, formatNumber, formatPower, formatScore, LEVEL_TEXT } from './stats.js'
-import { SCORE_STEPS, setPalette, regimeColor } from './colors.js'
-import { createMap } from './map.js'
+import { SCORE_STEPS, regimeColor } from './colors.js?v=ember-12'
+import { createMap } from './map.js?v=ember-12'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
 import { createListeningPanel } from './sound.js?v=fresh-start-8'
-import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
+import { playCalendar, stopCalendar, isPlaying } from './sweep.js?v=ember-12'
 import { wireSearch } from './search.js'
-import { startFlames } from './flames.js'
-import { loadPref, savePref, saveTheme } from './prefs.js?v=fresh-start-8'
+import { startFlames } from './flames.js?v=ember-12'
+import { loadPref, savePref } from './prefs.js?v=fresh-start-8'
 import { initChat } from './chat.js'
 
 const $ = id => document.getElementById(id)
@@ -42,10 +42,10 @@ let feature = null                 // the open panel: 'trends', 'anomalies', 'pa
 
 const settings = {
   dark: document.documentElement.dataset.theme === 'dark',
-  safeColors: loadPref('safeColors', false),      // colours for colour-blind viewers
+  invert: loadPref('invert', false),              // colour inversion: flips every colour on the site
   speech: loadPref('speech', false),              // spoken month descriptions in the Listen panel
   sideClosed: loadPref('sideClosed', window.innerWidth < 760),
-  basemap: loadPref('basemap', 'map'),            // 'map', 'satellite', 'terrain' or 'nasa'
+  basemap: loadPref('basemap', 'satellite'),      // 'satellite', 'terrain' or 'nasa' (the heat map)
   favourites: loadPref('favourites', []),         // [{ name, box }]
 }
 
@@ -245,7 +245,7 @@ function drawMapPeriod(picked) {
   const year = playingAt ? playingAt.year : picked ? picked.year : state.mapYear
   $('mapYear').value = year ? year - data.firstYear + 1 : 0
 
-  // The burn view shows a satellite picture from the same time: the shown month, or
+  // The heat map shows a satellite picture from the same time: the shown month, or
   // with no month chosen, the area's biggest fire month (of the shown year, if there is one).
   let showYear = year, showMonth = playingAt ? playingAt.month : picked ? picked.month : null
   if (showMonth === null && table) {
@@ -619,10 +619,11 @@ function drawPlaceChips() {
 }
 
 // ---------------------------------------------------------------------------
-// Settings: dark mode, colour-blind colours, spoken descriptions, the side menu
+// Settings: dark mode, colour inversion, spoken descriptions, the side menu
 // ---------------------------------------------------------------------------
 function applySettings() {
   document.documentElement.dataset.theme = settings.dark ? 'dark' : 'light'
+  document.documentElement.classList.toggle('is-inverted', settings.invert)
   document.body.classList.toggle('side-closed', settings.sideClosed)
   $('sideToggle').setAttribute('aria-expanded', String(!settings.sideClosed))
   document.querySelectorAll('[data-toggle]').forEach(b => b.setAttribute('aria-pressed', String(!!settings[b.dataset.toggle])))
@@ -632,20 +633,10 @@ function applySettings() {
 
 function toggleSetting(name) {
   settings[name] = !settings[name]
-  if (name === 'dark') {
-    saveTheme(settings.dark ? 'dark' : 'light')
-    applySettings()
-    mapView.setDark(settings.dark)
-    flames.redraw()
-  } else {
-    savePref(name, settings[name])
-    applySettings()
-  }
-  if (name === 'safeColors') {
-    setPalette(settings.safeColors ? 'safe' : 'fire')
-    mapView.redrawColors()
-    render()
-  }
+  // Light or dark is not saved: every visit starts from the computer's own setting.
+  if (name !== 'dark') savePref(name, settings[name])
+  applySettings()
+  if (name === 'dark') flames.redraw()
   if (name === 'speech') {
     $('audioSpeech').checked = settings.speech
     listening?.stop()
@@ -691,12 +682,14 @@ function stopPlaying() {
 function startPlaying() {
   listening?.stop()
   $('mapPlay').setAttribute('aria-pressed', 'true')
+  // the speed is read again before every month, so the menu works while it plays
+  const speed = () => Number($('mapSpeed').value)
   playCalendar(table, (row, month) => {
     markPlaying($('calendar'), row, month)
     if (row === null || row === undefined) return
     playingAt = { year: table.years[row], month: Number.isInteger(month) ? month : 0 }
     drawMapPeriod(focus())
-  }, stopPlaying)
+  }, stopPlaying, speed)
 }
 
 // Shared by navigation and microphone actions.
@@ -712,12 +705,62 @@ function wireShell() {
     b.onclick = () => { closeMenuOnPhone(); show(b.dataset.page) }
   })
   document.querySelectorAll('[data-feature]').forEach(b => {
-    b.onclick = () => { closeMenuOnPhone(); feature === b.dataset.feature ? closeFeature() : openFeature(b.dataset.feature) }
+    b.onclick = () => {
+      closeMenuOnPhone()
+      // Listen is opened from the Accessibility window, which then gets out of the way
+      if (b.closest('#accessPanel')) { $('accessClose').click(); openFeature(b.dataset.feature); return }
+      feature === b.dataset.feature ? closeFeature() : openFeature(b.dataset.feature)
+    }
   })
   $('featureClose').onclick = closeFeature
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && feature && !event.target.closest('input, select')) closeFeature()
+    if (event.key === 'Escape' && feature && $('accessPanel').hidden && !event.target.closest('input, select')) closeFeature()
   })
+
+  // light or dark follows the computer. If the computer switches (say, at sunset), so does Ember.
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+    settings.dark = event.matches
+    applySettings()
+    flames.redraw()
+  })
+
+  // Accessibility settings: a small window opened from the side menu, or with Alt + Shift + A
+  const accessPanel = $('accessPanel'), accessButton = $('accessButton')
+  const openAccess = open => {
+    accessPanel.hidden = !open
+    accessButton.setAttribute('aria-expanded', String(open))
+    if (open) accessPanel.focus()      // so a screen reader starts reading the settings
+  }
+  accessButton.onclick = () => openAccess(accessPanel.hidden)
+  $('accessClose').onclick = () => openAccess(false)
+  $('skipToAccess').onclick = event => { event.preventDefault(); openAccess(true) }
+  document.addEventListener('keydown', event => {
+    // event.code is the physical key: on a Mac, Option changes the letter that is typed
+    if (event.code === 'KeyA' && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault()
+      openAccess(accessPanel.hidden)
+    }
+    if (event.key === 'Escape') openAccess(false)
+  })
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#accessPanel, #accessButton, #skipToAccess')) openAccess(false)
+  })
+
+  // the eye on the map key hides the coloured squares, to look at the bare map first
+  $('gridToggle').onclick = () => {
+    const shown = $('gridToggle').getAttribute('aria-pressed') !== 'true'
+    $('gridToggle').setAttribute('aria-pressed', String(shown))
+    $('gridToggle').title = shown ? 'Hide the squares' : 'Show the squares'
+    $('mapKey').classList.toggle('is-off', !shown)
+    mapView.setGridVisible(shown)
+  }
+
+  // the small arrow on the map key folds it away, so it does not cover the map
+  $('keyFold').onclick = () => {
+    const folded = $('mapKey').classList.toggle('is-folded')
+    $('keyFold').setAttribute('aria-expanded', String(!folded))
+    $('keyFold').title = folded ? 'Show the key' : 'Hide the key'
+  }
 
   $('sideToggle').onclick = () => toggleSetting('sideClosed')
   document.querySelectorAll('[data-toggle]').forEach(b => { b.onclick = () => toggleSetting(b.dataset.toggle) })
@@ -958,7 +1001,6 @@ async function start() {
   })
   document.body.dataset.page = page
 
-  setPalette(settings.safeColors ? 'safe' : 'fire')
   flames = startFlames($('flames'))
   flames.setActive(page === 'home')
 
@@ -966,7 +1008,6 @@ async function start() {
     onAreaChange: area => update({ area }),
     onRegimeClick: (props, latlng) => mapView.openPopup(regimeStory(props), latlng),
   })
-  mapView.setDark(settings.dark)
   mapView.setBasemap(settings.basemap)
   mapView.loadPlaces()   // not awaited: only the offline search needs it
 

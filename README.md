@@ -24,16 +24,20 @@ Then open http://localhost:8000 in your browser. Press Ctrl+C in the terminal to
 ## What is in the app
 
 - **Home**: search any place (or type coordinates), pick a custom area, and keep favourites during the current visit.
-  Dark mode, colours for colour-blind viewers and spoken descriptions are switched on here.
-- **Map**: map, satellite, terrain and a NASA burn view. The hotspot grid sits on top. Click the map
+- **Map**: satellite, terrain and a NASA heat map (infrared picture where burned land shows dark red). The hotspot grid sits on top. Click the map
   to pick a place, drag the box to move it, drag a corner to resize it, or Shift + drag to draw one.
+  The Play button steps through the months; the menu beside the slider sets its speed.
+  The small arrow on the map key folds it away.
 - **Trends**: one plain sentence about the area, a year against a usual year, and the burning
   calendar (years down, months across). Select a square to see that month on the map.
 - **Anomalies**: the months that were furthest from normal.
 - **Patterns**: the fire regimes in the area.
 - **Forecast**: expected against actual hotspots.
-- **Listen**: plays a year as sound.
+- **Listen** (opened from Accessibility): plays a year as sound.
 - **About the data**: how MODIS and VIIRS compare, and where everything comes from.
+- **Accessibility** (side menu, or Alt + Shift + A): colour inversion, spoken descriptions, Listen,
+  the Speak button for voice commands, and the list of keyboard shortcuts.
+- **Light or dark** follows the computer's own setting. The button in the top-right corner switches it for the current visit.
 - **⋮ menu**: copy a link to the exact view, or download the hotspots as CSV.
 - **Chat**: the round button in the corner answers questions about the numbers on screen.
 
@@ -58,7 +62,7 @@ The three lines in the top-left corner hide and show the side menu.
 | `js/sound.js`, `js/fire-audio.js`, `js/listening-model.js` | the Listen panel |
 | `js/sweep.js` | the Play button on the map |
 | `js/chat.js` | the chat box |
-| `js/colors.js` | colour ramps, and the colour-blind palette |
+| `js/colors.js` | colour ramps |
 | `js/tooltip.js` | the small box that appears when you hover |
 | `server/chat-worker.js` | the small chat server (see "Chat box" below) |
 | `public/data/` | data files. Format: [DATA_FORMAT.md](DATA_FORMAT.md) |
@@ -66,7 +70,7 @@ The three lines in the top-left corner hide and show the side menu.
 | `vendor/` | Leaflet and topojson-client, copied in |
 | `analysis/` | Python analysis code (fire regimes) |
 
-The map pictures and the place search come from free services (CARTO, Esri, NASA GIBS, Photon),
+The map pictures and the place search come from free services (Esri, NASA GIBS, Photon),
 so those two need internet. Everything else works without it.
 
 ## Data
@@ -118,7 +122,7 @@ Checks: `node --test tests/listening.test.mjs`.
 
 ### Microphone commands
 
-The **Speak** microphone button beside Listen accepts one English command per click:
+The **Speak** button in the Accessibility settings accepts one English command per click:
 
 - `2024 Activity` (or just `2024`): January–December activity playback.
 - `2024 Unusual Activity`: January–December anomaly playback.

@@ -11,12 +11,20 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="css/style.css?v=fresh-start-8">
+  <link rel="stylesheet" href="css/style.css?v=ember-12">
 
-  <!-- Every new visit starts with the same light theme. -->
-  <script>document.documentElement.dataset.theme = 'light'</script>
+  <!-- light or dark follows the computer's own setting, decided before the page draws so it does not flash -->
+  <script>
+    document.documentElement.dataset.theme =
+      window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  </script>
 </head>
 <body data-page="home">
+
+  <!-- For screen readers and keyboard users: the first thing on the page says which shortcuts exist.
+       The link only shows when you reach it with the Tab key. -->
+  <p class="visually-hidden">Ember. Keyboard shortcuts: press Alt + Shift + M, or Option + Shift + M on a Mac, to speak a command. Press Alt + Shift + A to open the accessibility settings.</p>
+  <a class="skip-link" href="#accessPanel" id="skipToAccess">Accessibility settings and keyboard shortcuts</a>
 
   <!-- The logo and the icons are drawn once here and reused with <use href="#..."> -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -38,6 +46,8 @@
     <symbol id="i-area" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.2 1.8"/><rect x="1.5" y="1.5" width="3" height="3" fill="currentColor"/><rect x="11.5" y="11.5" width="3" height="3" fill="currentColor"/></symbol>
     <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
     <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-access" viewBox="0 0 16 16"><circle cx="8" cy="2.9" r="1.5" fill="currentColor"/><path d="M2.8 5.8h10.4M8 5.8v4.2M8 10l-2.6 4.2M8 10l2.6 4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
     <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
     <symbol id="i-more" viewBox="0 0 16 16"><circle cx="8" cy="3" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="13" r="1.5" fill="currentColor"/></symbol>
@@ -66,9 +76,6 @@
     </div>
 
     <div class="top-actions">
-      <button type="button" class="icon-button" data-toggle="safeColors" aria-pressed="false" title="Colours for colour-blind viewers">
-        <svg aria-hidden="true"><use href="#i-eye"/></svg><span class="visually-hidden">Colours for colour-blind viewers</span>
-      </button>
       <button type="button" class="icon-button" data-toggle="dark" aria-pressed="false" title="Light or dark">
         <svg class="when-light" aria-hidden="true"><use href="#i-moon"/></svg><svg class="when-dark" aria-hidden="true"><use href="#i-sun"/></svg>
         <span class="visually-hidden">Dark mode</span>
@@ -102,13 +109,42 @@
     <button type="button" class="side-item" data-feature="anomalies"><svg aria-hidden="true"><use href="#i-anomalies"/></svg><span>Anomalies</span></button>
     <button type="button" class="side-item" data-feature="patterns"><svg aria-hidden="true"><use href="#i-patterns"/></svg><span>Patterns</span></button>
     <button type="button" class="side-item" data-feature="forecast" id="forecastTab" hidden><svg aria-hidden="true"><use href="#i-forecast"/></svg><span>Forecast</span></button>
-    <button type="button" class="side-item" data-feature="listen"><svg aria-hidden="true"><use href="#i-listen"/></svg><span>Listen</span></button>
-    <button type="button" class="side-item microphone" id="microphoneButton" aria-label="Microphone: speak a command" aria-keyshortcuts="Alt+Shift+M" title="Speak (Option + Shift + M on Mac; Alt + Shift + M on Windows)" aria-pressed="false" aria-describedby="voiceStatus voiceShortcut">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Speak</span></button>
     <div class="side-foot">
+      <button type="button" class="side-item" id="accessButton" aria-haspopup="dialog" aria-expanded="false" aria-controls="accessPanel" aria-keyshortcuts="Alt+Shift+A"><svg aria-hidden="true"><use href="#i-access"/></svg><span>Accessibility</span></button>
       <button type="button" class="side-item" data-feature="about"><svg aria-hidden="true"><use href="#i-about"/></svg><span>About the data</span></button>
     </div>
   </nav>
+
+  <!-- ===================== accessibility settings (one place for all of them) ===================== -->
+  <section class="access-panel" id="accessPanel" role="dialog" aria-labelledby="accessTitle" tabindex="-1" hidden>
+    <div class="access-head">
+      <h2 id="accessTitle">Accessibility</h2>
+      <button type="button" class="icon-button" id="accessClose" aria-label="Close accessibility settings"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+
+    <button type="button" class="switch" data-toggle="invert" aria-pressed="false"><i></i>Colour inversion</button>
+    <p class="access-note">Flips every colour on the site: light becomes dark, and each colour becomes its opposite.</p>
+
+    <button type="button" class="switch" data-toggle="speech" aria-pressed="false"><i></i>Spoken descriptions</button>
+    <p class="access-note">Reads each month out loud while the Listen panel plays.</p>
+
+    <h3>Listen</h3>
+    <button type="button" class="button access-listen" data-feature="listen"><svg aria-hidden="true"><use href="#i-listen"/></svg><span>Listen to the data</span></button>
+    <p class="access-note">Plays a year as sound, month by month, for the place you picked.</p>
+
+    <h3>Voice commands</h3>
+    <button type="button" class="button microphone" id="microphoneButton" aria-label="Microphone: speak a command" aria-keyshortcuts="Alt+Shift+M" title="Speak (Option + Shift + M on Mac; Alt + Shift + M on Windows)" aria-pressed="false" aria-describedby="voiceStatus voiceShortcut"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Speak a command</span></button>
+    <p class="access-note">Then say something like “2024” or “April 2024 Fire Energy”. The Listen panel has the full list under “Keyword guide”.</p>
+
+    <h3>Keyboard shortcuts</h3>
+    <dl class="shortcuts">
+      <dt><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>M</kbd></dt><dd>Speak a command</dd>
+      <dt><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>A</kbd></dt><dd>Open or close these settings</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Close a panel or a menu</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd></dt><dd>Move through search results and pick one</dd>
+    </dl>
+    <p class="access-note">On a Mac, use Option instead of Alt.</p>
+  </section>
 
   <!-- ===================== pages ===================== -->
   <main class="main">
@@ -152,20 +188,6 @@
           <div class="chips" id="placeChips"></div>
         </div>
 
-        <div class="home-nav" role="group" aria-label="Go to">
-          <button type="button" class="nav-button is-main" data-page="map"><svg aria-hidden="true"><use href="#i-map"/></svg>Map</button>
-          <button type="button" class="nav-button" data-feature="trends"><svg aria-hidden="true"><use href="#i-trends"/></svg>Trends</button>
-          <button type="button" class="nav-button" data-feature="anomalies"><svg aria-hidden="true"><use href="#i-anomalies"/></svg>Anomalies</button>
-          <button type="button" class="nav-button" data-feature="patterns"><svg aria-hidden="true"><use href="#i-patterns"/></svg>Patterns</button>
-          <button type="button" class="nav-button" data-feature="listen"><svg aria-hidden="true"><use href="#i-listen"/></svg>Listen</button>
-        </div>
-
-        <div class="home-settings" role="group" aria-label="Display and accessibility">
-          <button type="button" class="switch" data-toggle="dark" aria-pressed="false"><i></i>Dark mode</button>
-          <button type="button" class="switch" data-toggle="safeColors" aria-pressed="false"><i></i>Colour-blind colours</button>
-          <button type="button" class="switch" data-toggle="speech" aria-pressed="false"><i></i>Spoken descriptions</button>
-        </div>
-
         <p class="home-status" id="homeStatus">Loading the satellite record…</p>
       </div>
     </section>
@@ -178,10 +200,9 @@
 
         <div class="map-top">
           <div class="segmented" role="group" aria-label="Map style">
-            <button type="button" data-basemap="map" aria-pressed="true">Map</button>
-            <button type="button" data-basemap="satellite" aria-pressed="false">Satellite</button>
+            <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
             <button type="button" data-basemap="terrain" aria-pressed="false">Terrain</button>
-            <button type="button" data-basemap="nasa" aria-pressed="false" title="NASA MODIS picture that makes burn scars stand out">Burn view</button>
+            <button type="button" data-basemap="nasa" aria-pressed="false" title="NASA MODIS infrared picture: burned land shows up dark red, plants green">Heat map</button>
           </div>
           <div class="area-pill" id="areaPill" hidden>
             <button type="button" class="star" id="starButton" aria-pressed="false" title="Add to favourites">
@@ -192,18 +213,30 @@
         </div>
 
         <div class="map-key" id="mapKey">
-          <div class="segmented is-small" role="group" aria-label="What the map shows">
-            <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
-            <button type="button" data-layer="regimes" aria-pressed="false">Patterns</button>
+          <div class="map-key-head">
+            <div class="segmented is-small" role="group" aria-label="What the map shows">
+              <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
+              <button type="button" data-layer="regimes" aria-pressed="false">Patterns</button>
+            </div>
+            <!-- hides the coloured squares, to look at the bare map first -->
+            <button type="button" class="icon-button key-fold" id="gridToggle" aria-pressed="true" title="Hide the squares">
+              <svg aria-hidden="true"><use href="#i-eye"/></svg><span class="visually-hidden">Show the hotspot or pattern squares on the map</span>
+            </button>
+            <!-- folds the key away so it does not cover the map -->
+            <button type="button" class="icon-button key-fold" id="keyFold" aria-expanded="true" aria-controls="mapKeyBody" title="Hide the key">
+              <svg aria-hidden="true"><use href="#i-chevron"/></svg><span class="visually-hidden">Show or hide the map key</span>
+            </button>
           </div>
+          <div id="mapKeyBody">
           <div class="legend" id="mapLegend"></div>
-          <ul class="imagery-key" id="imageryKey" hidden aria-label="What the colours in the burn view mean">
+          <ul class="imagery-key" id="imageryKey" hidden aria-label="What the colours in the heat map mean">
             <li><i style="background:#7a2a1e"></i>Burn scar</li>
             <li><i style="background:#ff7a1a"></i>Active fire</li>
             <li><i style="background:#3f8f3a"></i>Vegetation</li>
             <li><i style="background:#b38a63"></i>Bare ground</li>
           </ul>
           <p class="imagery-caption" id="imageryCaption" hidden>NASA MODIS, <span id="imageryDate"></span></p>
+          </div>
         </div>
 
         <p class="map-toast" id="mapHint" hidden></p>
@@ -214,6 +247,13 @@
           </button>
           <label class="timebar-label" for="mapYear"><span id="mapYearText">All years</span></label>
           <input type="range" id="mapYear" min="0" max="1" step="1" value="0" aria-label="Year shown on the map">
+          <select class="speed" id="mapSpeed" aria-label="Playing speed" title="How fast Play moves through the months">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
         </div>
       </div>
 
@@ -349,7 +389,7 @@
               <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. Wildfires are the most common cause, but volcanoes, gas flares and farm burning show up too. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record uses MODIS for every year, so 2006 and 2026 are counted the same way; VIIRS is used to check it (above).</p>
               <p><b>What is the score?</b> How far a month is from the average of that same calendar month, counted in standard deviations (σ). Around 0 is normal. 2 or more is unusual.</p>
               <p class="foot-sources">Ember by Syntax TERROR (Aashana, Pearl, Mridul, Snavya, Krish, Shriya) for NASA Space Apps 2026.</p>
-              <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Maps: OpenStreetMap, CARTO and Esri. Burn view: NASA GIBS / Worldview (MODIS corrected reflectance, bands 7-2-1). Place search: Photon (OpenStreetMap) and Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
+              <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite and terrain maps: Esri. Heat map: NASA GIBS / Worldview (MODIS corrected reflectance, bands 7-2-1). Place search: Photon (OpenStreetMap) and Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
             </footer>
           </div>
 
@@ -379,6 +419,6 @@
 
   <script src="vendor/leaflet.js"></script>
   <script src="vendor/topojson-client.min.js"></script>
-  <script type="module" src="js/app.js?v=fresh-start-8"></script>
+  <script type="module" src="js/app.js?v=ember-12"></script>
 </body>
 </html>

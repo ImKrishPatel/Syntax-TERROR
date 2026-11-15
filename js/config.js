@@ -45,20 +45,17 @@ export const CONFIG = {
   },
 
   // Map pictures ("tiles") for each map style. All free, no key needed.
-  // {z}/{x}/{y} are filled in by the map library. `labels` is drawn on top of the picture.
+  // {z}/{x}/{y} are filled in by the map library.
+  // labels: place names and borders drawn on top. relief: hill shading blended in to make mountains bolder.
   basemaps: {
-    map: {
-      light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      credit: '© OpenStreetMap contributors © CARTO',
-    },
     satellite: {
-      light: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      picture: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
       credit: 'Imagery © Esri, Maxar, Earthstar Geographics',
     },
     terrain: {
-      light: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      picture: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      relief: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
       credit: '© Esri, HERE, Garmin, USGS, © OpenStreetMap contributors',
     },
   },

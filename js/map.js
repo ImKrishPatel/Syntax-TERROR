@@ -1,12 +1,12 @@
-// The map: a background picture you can switch (map, satellite, terrain, burn view),
+// The map: a background picture you can switch (satellite, terrain, heat map),
 // the hotspot grid on top of it, the selected area, and the fire regime layer.
 //
 // Uses Leaflet (window.L) and topojson-client (window.topojson) from /vendor.
 // The background pictures come from free map services listed in config.js.
 
-import { CONFIG, MONTHS_SHORT } from './config.js'
+import { CONFIG, MONTHS_SHORT } from './config.js?v=ember-12'
 import { data } from './data.js'
-import { FIRE_RAMP, fireBreaks, fireColor, regimeColor } from './colors.js'
+import { FIRE_RAMP, fireBreaks, fireColor, regimeColor } from './colors.js?v=ember-12'
 import { formatNumber, formatPower } from './stats.js'
 
 const MAGENTA = '#B4136B'          // the selected area, on light maps
@@ -17,19 +17,41 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const half = CONFIG.cellSize / 2
 
   const map = L.map(element, {
-    zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
+    // small zoom steps and a short wait make the mouse wheel feel smooth instead of jumpy
+    zoomSnap: 0.1, zoomDelta: 0.5, wheelPxPerZoomLevel: 100, wheelDebounceTime: 25,
     minZoom: 2, maxZoom: 11,
     maxBounds: [[-85, -260], [86, 260]],
     zoomControl: false, attributionControl: false,
     boxZoom: false,   // Shift + drag draws a new area instead
   })
-  L.control.zoom({ position: 'topright' }).addTo(map)
+  const zoomControl = L.control.zoom({ position: 'topright' }).addTo(map)
+
+  // A zoom slider that opens between + and - when the mouse is over them (see .zoom-slide in style.css)
+  const zoomSlide = document.createElement('div')
+  zoomSlide.className = 'zoom-slide'
+  zoomSlide.innerHTML = `<input type="range" min="${map.getMinZoom()}" max="${map.getMaxZoom()}" step="0.1" aria-label="Zoom">`
+  zoomControl.getContainer().insertBefore(zoomSlide, zoomControl.getContainer().lastChild)
+  const zoomInput = zoomSlide.firstChild
+  // without these, dragging the slider would also drag the map underneath it
+  L.DomEvent.disableClickPropagation(zoomSlide)
+  L.DomEvent.disableScrollPropagation(zoomSlide)
+  // keep the slider open while it is being dragged, even if the mouse slips off it
+  zoomSlide.addEventListener('pointerdown', () => {
+    zoomControl.getContainer().classList.add('is-sliding')
+    document.addEventListener('pointerup', () => zoomControl.getContainer().classList.remove('is-sliding'), { once: true })
+  })
+  zoomInput.addEventListener('input', () => map.setZoom(Number(zoomInput.value), { animate: false }))
+  map.on('zoom', () => { zoomInput.value = map.getZoom() })
   L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map)
   // keep the map the right size when the layout changes (a panel opens, the menu hides)
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe(element)
 
   // Layers are stacked in "panes", lowest first:
-  // background picture (Leaflet's own tile pane) < cells < place names < selected area
+  // background picture (Leaflet's own tile pane) < hill shading < cells < place names < selected area
+  const reliefPane = map.createPane('relief')
+  reliefPane.style.zIndex = 250
+  reliefPane.style.pointerEvents = 'none'
+  reliefPane.style.mixBlendMode = 'multiply'    // the shading darkens the map under it, like a shadow
   const cellPane = map.createPane('cells')
   cellPane.style.zIndex = 300
   const labelPane = map.createPane('labels')
@@ -44,11 +66,10 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   // ---------------------------------------------------------------------------
   // Background pictures
   // ---------------------------------------------------------------------------
-  let basemap = 'map'
-  let dark = false
-  let baseLayer = null, labelLayer = null
+  let basemap = 'satellite'
+  let baseLayer = null, labelLayer = null, reliefLayer = null
 
-  // Burn view: a NASA MODIS picture in "7-2-1" colours, where burn scars are deep red
+  // Heat map: a NASA MODIS picture in "7-2-1" colours, where burn scars are deep red
   // and plants are green. One day of MODIS is often cloudy, so each tile is built from
   // several days: for every pixel we keep a darker pass, because clouds are bright.
   // Pictures: NASA GIBS (free, no key).
@@ -119,22 +140,25 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       })
     }
     const source = CONFIG.basemaps[basemap]
-    return L.tileLayer((dark && source.dark) || source.light, { subdomains: 'abcd', maxNativeZoom: 18, attribution: source.credit })
+    // the class name lets style.css make the terrain map darker and bolder
+    return L.tileLayer(source.picture, { maxNativeZoom: 17, attribution: source.credit, className: `tiles-${basemap}` })
   }
 
-  // is the picture behind the cells dark (a photo or the dark map)?
-  const onDarkPicture = () => basemap === 'satellite' || basemap === 'nasa' || (basemap === 'map' && dark)
+  // is the picture behind the cells dark (a photo)? The terrain map is the only light one.
+  const onDarkPicture = () => basemap !== 'terrain'
 
   function drawBasemap() {
-    if (baseLayer) map.removeLayer(baseLayer)
-    if (labelLayer) map.removeLayer(labelLayer)
+    for (const layer of [baseLayer, labelLayer, reliefLayer]) if (layer) map.removeLayer(layer)
     baseLayer = makeBaseLayer().addTo(map)
     // photos have no place names of their own, so borders and names are drawn over them
     const labels = basemap === 'nasa' ? CONFIG.basemaps.satellite.labels : CONFIG.basemaps[basemap].labels
-    labelLayer = labels ? L.tileLayer(labels, { pane: 'labels', maxNativeZoom: 18, attribution: 'Places and borders © Esri' }).addTo(map) : null
+    labelLayer = labels ? L.tileLayer(labels, { pane: 'labels', maxNativeZoom: 17, attribution: 'Places and borders © Esri' }).addTo(map) : null
+    // the terrain map gets hill shading on top, so mountains and valleys stand out
+    const relief = basemap === 'nasa' ? null : CONFIG.basemaps[basemap].relief
+    reliefLayer = relief ? L.tileLayer(relief, { pane: 'relief', maxNativeZoom: 13 }).addTo(map) : null
 
-    // On a light map the cells are blended in like ink on paper ("multiply"), so roads and
-    // names stay readable through them. On photos and the dark map they are simply see-through.
+    // On the terrain map the cells are blended in like ink on paper ("multiply"), so roads and
+    // names stay readable through them. On photos they are simply see-through.
     cellPane.style.mixBlendMode = onDarkPicture() ? 'normal' : 'multiply'
     element.classList.toggle('on-dark', onDarkPicture())
     box.setStyle({ color: onDarkPicture() ? MAGENTA_BRIGHT : MAGENTA })
@@ -143,15 +167,11 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   }
 
   function setBasemap(name) {
-    basemap = name === 'nasa' || CONFIG.basemaps[name] ? name : 'map'
-    drawBasemap()
-  }
-  function setDark(next) {
-    dark = next
+    basemap = name === 'nasa' || CONFIG.basemaps[name] ? name : 'satellite'
     drawBasemap()
   }
 
-  // the burn view shows the days around this date
+  // the heat map shows the days around this date
   function setImageryDate(date) {
     const d = date > TODAY ? TODAY : date < '2000-03-01' ? '2000-03-01' : date
     if (d === imageryDate) return
@@ -220,7 +240,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     }
     const breaks = fireBreaks(nearby && nearby.some(x => x > 0) ? nearby : v)
 
-    // thin pale lines between the squares make the grid show, without shouting
+    // A thin line around every square keeps them apart. The line is always one screen pixel wide,
+    // so the grid looks the same zoomed in or out. (Gaps between squares get uneven when zoomed out.)
     const line = onDarkPicture() ? { color: '#000', opacity: 0.25 } : { color: '#fff', opacity: 0.9 }
     cellSquares.forEach((square, i) => {
       const color = fireColor(v[i], breaks)
@@ -229,7 +250,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       let level = 0
       while (level + 1 < breaks.length && v[i] >= breaks[level + 1]) level++
       const strength = breaks.length > 1 ? level / (breaks.length - 1) : 1
-      square.setStyle({ fillColor: color, fillOpacity: (onDarkPicture() ? 0.4 : 0.3) + 0.45 * strength, ...line })
+      square.setStyle({ fillColor: color, fillOpacity: (onDarkPicture() ? 0.45 : 0.4) + 0.4 * strength, ...line })
     })
     hotspotLegend = { breaks, metric, period }
     drawLegend()
@@ -317,7 +338,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const box = L.rectangle([[0, 0], [1, 1]], {
     renderer: areaCanvas, interactive: false, fill: false, color: MAGENTA, weight: 2,
   })
-  const handleIcon = L.divIcon({ className: 'area-handle', iconSize: [18, 18] })
+  const handleIcon = L.divIcon({ className: 'area-handle', iconSize: [10, 10] })
   const handles = [0, 1, 2, 3].map(i => {
     const handle = L.marker([0, 0], { icon: handleIcon, draggable: true, bubblingMouseEvents: false, title: 'Drag to resize the area', zIndexOffset: 500 })
     handle.on('drag', () => {
@@ -362,10 +383,13 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     if (fit) fitArea()
   }
   function fitArea() {
-    if (!area) return
+    // nothing to fit while the map is hidden (its size is 0); it is fitted again when it shows
+    if (!area || !element.clientWidth) return
     const [s, w, n, e] = area
     // leave room around the box so you can see where it sits
-    map.fitBounds(L.latLngBounds([[s, w], [n, e]]).pad(0.35), { maxZoom: 8 })
+    // no animation: the map is often still hidden or changing size when this runs, and an
+    // animated move that starts then ends up in the wrong place
+    map.fitBounds(L.latLngBounds([[s, w], [n, e]]).pad(0.35), { maxZoom: 8, animate: false })
   }
 
   // Draw a new box by dragging on the map. onFinish() is called when it ends.
@@ -465,14 +489,17 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
 
   // ---------------------------------------------------------------------------
   map.setView([25, 0], 2.25)
+  zoomInput.value = map.getZoom()
   drawBasemap()
 
   return {
     loadPlaces, getPlaces: () => places,
     buildCells, setCells, setRegimes, showLayer,
     redrawColors() { if (cellValues) setCells(cellValues, cellMetric, cellPeriod); if (regimeLayer) regimeLayer.setStyle(regimeStyle); drawLegend() },
-    setBasemap, setDark, setImageryDate, imageryPeriod,
+    setBasemap, setImageryDate, imageryPeriod,
     setPlain, setArea, fitArea, startDrawing,
+    // show or hide the coloured squares (hotspots or patterns), to see the bare map
+    setGridVisible(visible) { cellPane.style.display = visible ? '' : 'none' },
     hasRegimes: () => !!regimeLayer,
     refresh: () => map.invalidateSize(),
     showWorld: () => map.setView([25, 0], 2.25),
