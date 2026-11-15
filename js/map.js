@@ -199,11 +199,13 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   function sizeHeat() {
     // radius follows the size of one grid cell on screen
     if (!map.hasLayer(heat)) return
-    const a = map.latLngToContainerPoint([0, 0]), b = map.latLngToContainerPoint([0, CONFIG.cellSize])
-    const px = Math.max(6, Math.abs(b.x - a.x))
-    heat.setOptions({ radius: px * 0.62, blur: px * 0.42 })
+    // a cell is taller than wide away from the equator (Mercator), so size by the larger side at the view's latitude
+    const lat = Math.max(-80, Math.min(80, map.getCenter().lat)), h = CONFIG.cellSize / 2
+    const a = map.latLngToContainerPoint([lat - h, 0]), b = map.latLngToContainerPoint([lat + h, CONFIG.cellSize])
+    const px = Math.max(6, Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+    heat.setOptions({ radius: px * 0.7, blur: px * 0.5 })
   }
-  map.on('zoomend', sizeHeat)
+  map.on('zoomend moveend', sizeHeat)
   // Leaflet.heat always puts its canvas in the overlay pane; move it under the area box and back
   let heatPoints = []
   function addHeat() {
