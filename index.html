@@ -111,14 +111,20 @@
               <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
               <button type="button" data-layer="regimes" aria-pressed="false">Fire regimes</button>
             </div>
-            <p class="tool-title">Map style</p>
-            <div class="segmented" role="group" aria-label="Map style">
-              <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
-              <button type="button" data-basemap="map" aria-pressed="false">Dark map</button>
-            </div>
+            <p class="tool-title">Satellite picture</p>
+            <ul class="imagery-key" aria-label="What the colours in the satellite picture mean">
+              <li><i style="background:#7a2a1e"></i>Burn scar</li>
+              <li><i style="background:#ff7a1a"></i>Active fire front</li>
+              <li><i style="background:#3f8f3a"></i>Vegetation</li>
+              <li><i style="background:#b38a63"></i>Bare ground</li>
+              <li><i style="background:#3fd0e8"></i>Snow and ice</li>
+              <li><i style="background:#f2f2f2"></i>Cloud</li>
+            </ul>
             <div class="legend" id="mapLegend"></div>
           </div>
         </div>
+        <div class="map-inset" id="mapInset" aria-hidden="true"></div>
+        <p class="imagery-caption" title="NASA MODIS on the Terra satellite, shortwave-infrared false colour (bands 7-2-1), the same kind of picture fire agencies use to map burned land. Daily passes leave gaps; those are filled with an ordinary photo.">MODIS Terra · bands 7-2-1 · <span id="imageryDate">2025-08-15</span></p>
         <p class="map-toast" id="mapHint" hidden>Drag the pink box to move it. Click anywhere to jump there. Shift + drag draws a new box.</p>
         <div class="timebar" id="timebar">
           <button type="button" class="play" id="mapPlay" aria-pressed="false" title="Play the years on the map, with sound">
@@ -224,7 +230,7 @@
         <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record puts both on the VIIRS scale so that 2005 can be compared with 2025.</p>
         <p><b>What is the score?</b> How far a month is from the average of that same calendar month, counted in standard deviations (σ). Around 0 is normal. 2 or more is unusual.</p>
         <p class="foot-sources">Ember Atlas by Syntax TERROR (Aashana, Pearl, Mridul, Snavya, Krish, Shriya) for NASA Space Apps 2026.</p>
-        <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite imagery and dark map: Esri. Place names for search: Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
+        <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite picture: NASA GIBS / Worldview (MODIS Terra corrected reflectance, bands 7-2-1); locator: NASA Blue Marble; place names and gap fill: Esri. Place names for search: Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
       </footer>
     </div>
   </main>

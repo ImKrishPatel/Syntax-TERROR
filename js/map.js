@@ -48,37 +48,59 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const areaCanvas = makePane('area', 400, false)
 
   // -------------------------------------------------------------------------
-  // Basemap
-  // -------------------------------------------------------------------------
-  // -------------------------------------------------------------------------
-  // Satellite basemap (Esri World Imagery: free, no key, attribution required)
+  // Basemap: NASA MODIS Terra false colour, bands 7-2-1 (NASA GIBS, free, no key).
+  // The same imagery as the CONAE fire maps in the challenge video: burn scars
+  // dark red-brown, active fire fronts orange, vegetation green, snow/ice cyan,
+  // clouds white. It is dated to the period the map shows. Esri World Imagery
+  // sits underneath only to fill gaps between daily satellite swaths.
   // -------------------------------------------------------------------------
   const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/'
-  const imagery = L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    pane: 'imagery', maxNativeZoom: 18,
-    attribution: 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'
+  const gapFill = L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imagery', maxNativeZoom: 18, opacity: 0.55,
+    attribution: 'Gap fill © Esri, Maxar, Earthstar Geographics',
+  }).addTo(map)
+  let imageryDate = CONFIG.imageryDefaultDate || '2025-08-15'
+  const falseColor = L.tileLayer(GIBS + 'MODIS_Terra_CorrectedReflectance_Bands721/default/{time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg', {
+    pane: 'imagery', maxNativeZoom: 9, time: imageryDate, bounds: [[-85, -180], [85, 180]],
+    attribution: 'Imagery: NASA GIBS / Worldview, MODIS Terra bands 7-2-1',
   })
+  falseColor.getTileUrl = function (c) { return L.TileLayer.prototype.getTileUrl.call(this, c).replace('{time}', imageryDate) }
+  falseColor.addTo(map)
   const imageryLabels = L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
     pane: 'imageryLabels', maxNativeZoom: 18,
-  })
-  // "Map": Esri's dark grey canvas, so fire colours stand out
-  const darkBase = L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    pane: 'imagery', maxNativeZoom: 16, attribution: 'Map © Esri, HERE, Garmin, OpenStreetMap contributors',
-  })
-  const darkLabels = L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-    pane: 'imageryLabels', maxNativeZoom: 16,
-  })
+  }).addTo(map)
   const vectorBase = L.layerGroup()   // Natural Earth outlines; only used if the tiles can't load
-  let basemap = 'satellite'
+  element.classList.add('is-satellite')
 
-  function setBasemap(name) {
-    basemap = name
-    const satellite = name === 'satellite'
-    element.classList.toggle('is-satellite', satellite)
-    element.classList.toggle('is-dark', !satellite)
-    for (const l of [imagery, imageryLabels, darkBase, darkLabels]) map.removeLayer(l)
-    if (satellite) { imagery.addTo(map); imageryLabels.addTo(map) } else { darkBase.addTo(map); darkLabels.addTo(map) }
-    if (regimeLayer) regimeLayer.setStyle(regimeStyle)
+  // date string for the imagery: mid-month of the shown month, or the peak-fire month of a shown year
+  function setImageryDate(date) {
+    const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
+    const d = date > yesterday ? yesterday : date < '2000-03-01' ? '2000-03-01' : date
+    if (d === imageryDate) return
+    imageryDate = d
+    falseColor.redraw()
+    const cap = document.getElementById('imageryDate')
+    if (cap) cap.textContent = d
+  }
+
+  // locator inset (top right in the CONAE maps): the world with a box where the main map is
+  const insetEl = document.getElementById('mapInset')
+  let inset = null, insetBox = null
+  if (insetEl) {
+    inset = L.map(insetEl, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, worldCopyJump: false })
+    L.tileLayer(GIBS + 'BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg', { maxNativeZoom: 8 }).addTo(inset)
+    inset.setView([20, 0], 0)
+    insetBox = L.rectangle(map.getBounds(), { color: '#ff3b30', weight: 2, fill: false, interactive: false }).addTo(inset)
+    const sync = () => {
+      const b = map.getBounds()
+      insetBox.setBounds(b)
+      inset.setView(b.getCenter(), Math.max(0, Math.min(3, map.getZoom() - 4)), { animate: false })
+    }
+    map.on('moveend zoomend', sync)
+    if (window.ResizeObserver) new ResizeObserver(() => inset.invalidateSize()).observe(insetEl)
+    setTimeout(sync, 0)
   }
 
   let places = []
@@ -271,7 +293,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   function regimeStyle(f) {
     const p = f.properties
     return {
-      fillColor: p.color || '#999', fillOpacity: basemap === 'satellite' ? 0.55 : 0.7,
+      fillColor: p.color || '#999', fillOpacity: 0.55,
       color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0,
     }
   }
@@ -454,7 +476,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   drawGraticule()
 
   return {
-    map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setBasemap,
+    map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setImageryDate,
     getPlaces: () => places,
     refresh: () => { map.invalidateSize(); if (showing === 'hotspots') addHeat() },
     openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),

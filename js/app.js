@@ -187,6 +187,9 @@ function drawMapPeriod(picked) {
   mapView.setCells(cellTotals(first, last), state.metric, period)
   $('mapYearText').textContent = playingAt || picked || state.mapYear ? period : 'All years'
   const year = playingAt ? playingAt.year : picked ? picked.year : state.mapYear
+  // satellite picture for the same period: mid-month of the shown month, or August of a shown year
+  const shownMonth = playingAt ? playingAt.month : picked ? picked.month : 7
+  mapView.setImageryDate(`${year || state.toYear}-${String(shownMonth + 1).padStart(2, '0')}-15`)
   $('mapYear').value = year ? year - data.firstYear + 1 : 0
 }
 
@@ -553,12 +556,6 @@ function wireControls() {
   document.querySelectorAll('[data-metric]').forEach(b => { b.onclick = () => update({ metric: b.dataset.metric }) })
   document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => update({ mode: b.dataset.mode }) })
   document.querySelectorAll('[data-layer]').forEach(b => { b.onclick = () => update({ layer: b.dataset.layer }) })
-  document.querySelectorAll('[data-basemap]').forEach(b => {
-    b.onclick = () => {
-      mapView.setBasemap(b.dataset.basemap)
-      document.querySelectorAll('[data-basemap]').forEach(x => x.setAttribute('aria-pressed', String(x === b)))
-    }
-  })
 
   // The listening feature shares month selection with the calendar and map.
   listening = createListeningPanel({
@@ -623,7 +620,6 @@ async function start() {
     onRegimeClick: (props, latlng) => mapView.openPopup(regimeStory(props), latlng),
   })
   mapView.loadBasemap()   // not awaited: the map fills in while the data loads
-  mapView.setBasemap('satellite')
 
   try {
     await loadHotspots()
