@@ -4,21 +4,31 @@
 // user has selected (area, years, month, ...). Whenever it changes we call
 // render(), which redraws every part of the page from the state. The state is
 // also written into the page address, so a link opens the exact same view.
+//
+// Two more things are kept apart from the state:
+//   - which page and panel are open (`page` and `feature`)
+//   - settings the browser remembers (`settings`: dark mode, favourites, ...)
 
 import { CONFIG, MONTHS } from './config.js'
 import { data, loadHotspots, loadJson, monthlyTotals, cellTotals, rowsAsCsv, monthIndex, cellsInArea } from './data.js'
 import { buildTable, monthVerdict, overviewVerdict, formatValue, formatNumber, formatPower, formatScore, LEVEL_TEXT } from './stats.js'
-import { SCORE_STEPS } from './colors.js'
+import { SCORE_STEPS, setPalette, regimeColor } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
 import { createListeningPanel } from './sound.js'
 import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
+import { wireSearch } from './search.js'
+import { startFlames } from './flames.js'
+import { loadPref, savePref, saveTheme } from './prefs.js'
+import { initChat } from './chat.js'
 
 const $ = id => document.getElementById(id)
 
 const state = {
   area: [...CONFIG.defaultArea],   // [south, west, north, east]
+  label: null,                     // the place name, when the area came from a search or a favourite
+  hasArea: false,                  // false until a place is chosen: the map shows the whole world
   fromYear: 0,
   toYear: 0,
   month: null,                     // '2023-05' when one month is selected, otherwise null
@@ -26,15 +36,37 @@ const state = {
   mode: 'amount',                  // calendar colours: 'amount' or 'score'
   layer: 'hotspots',               // map layer: 'hotspots' or 'regimes'
   mapYear: null,                   // one year shown on the map (time slider), or null for the selected years
-  hasArea: false,                  // false until a place is searched or picked: the map is a plain globe
 }
 let page = 'home'                  // 'home' or 'map'
-let feature = null                 // open feature window: 'trends', 'anomalies', 'patterns', 'listen', 'about'
+let feature = null                 // the open panel: 'trends', 'anomalies', 'patterns', 'forecast', 'listen', 'about'
 
-let listening = null
+const settings = {
+  dark: document.documentElement.dataset.theme === 'dark',
+  safeColors: loadPref('safeColors', false),      // colours for colour-blind viewers
+  speech: loadPref('speech', false),              // spoken month descriptions in the Listen panel
+  sideClosed: loadPref('sideClosed', window.innerWidth < 760),
+  basemap: loadPref('basemap', 'map'),            // 'map', 'satellite', 'terrain' or 'nasa'
+  favourites: loadPref('favourites', []),         // [{ name, box }]
+}
+
+const PANELS = {
+  trends: 'Trends',
+  anomalies: 'Anomalies',
+  patterns: 'Patterns',
+  forecast: 'Forecast',
+  listen: 'Listen to the data',
+  about: 'About the data',
+}
+const NEEDS_AREA = ['trends', 'anomalies', 'patterns', 'listen']
+
+let ready = false       // true once hotspots.csv has loaded
 let mapView = null
+let flames = null
+let listening = null
 let table = null        // the calendar numbers for the current area and years
 let regimes = null      // { geojson, summary } once loaded
+let forecastData = null
+let validationData = null
 let playingAt = null    // { year, month } while the map is playing through the record
 
 // ---------------------------------------------------------------------------
@@ -45,40 +77,59 @@ function readAddress() {
   const area = (params.get('area') || '').split(',').map(Number)
   state.hasArea = area.length === 4 && area.every(v => Number.isFinite(v)) && area[0] < area[2] && area[1] < area[3]
   if (state.hasArea) state.area = area
-  const years = (params.get('years') || '').split('-').map(Number)
+  state.label = state.hasArea ? params.get('name') : null
+  const month = params.get('month')
+  state.month = month && /^\d{4}-\d{2}$/.test(month) ? month : null
+  state.metric = params.get('measure') === 'frp' ? 'frp' : 'count'
+  state.mode = params.get('colour') === 'score' ? 'score' : 'amount'
+  state.layer = params.get('layer') === 'regimes' ? 'regimes' : 'hotspots'
+  const tab = params.get('tab')
+  feature = PANELS[tab] ? tab : null
+  page = state.hasArea || feature || params.get('page') === 'map' ? 'map' : 'home'
+}
+
+// the years need the data file (to know which years exist), so they are read after it loads
+function readYears() {
+  const years = (new URLSearchParams(location.hash.slice(1)).get('years') || '').split('-').map(Number)
   if (years.length === 2 && years[0] >= data.firstYear && years[1] <= data.lastYear && years[0] <= years[1]) {
     state.fromYear = years[0]; state.toYear = years[1]
+  } else {
+    state.fromYear = data.firstYear; state.toYear = data.lastYear
   }
-  const month = params.get('month')
-  state.month = month && monthIndex(month) >= 0 ? month : null
-  if (params.get('measure') === 'frp') state.metric = 'frp'
-  if (params.get('colour') === 'score') state.mode = 'score'
-  if (params.get('layer') === 'regimes') state.layer = 'regimes'
+  if (state.month && monthIndex(state.month) < 0) state.month = null
 }
 
 function writeAddress() {
+  if (!ready) return
   const params = new URLSearchParams()
-  if (!state.hasArea) {
-    try { history.replaceState(null, '', page === 'map' ? '#page=map' : location.pathname + location.search) } catch (err) { /* fine */ }
-    return
+  if (state.hasArea) {
+    params.set('area', state.area.join(','))
+    if (state.label) params.set('name', state.label)
+    params.set('years', `${state.fromYear}-${state.toYear}`)
+    if (state.month) params.set('month', state.month)
+    if (state.metric === 'frp') params.set('measure', 'frp')
+    if (state.mode === 'score') params.set('colour', 'score')
+    if (state.layer === 'regimes') params.set('layer', 'regimes')
+  } else if (page === 'map') {
+    params.set('page', 'map')
   }
-  params.set('area', state.area.join(','))
-  params.set('years', `${state.fromYear}-${state.toYear}`)
-  if (state.month) params.set('month', state.month)
-  if (state.metric === 'frp') params.set('measure', 'frp')
-  if (state.mode === 'score') params.set('colour', 'score')
-  if (state.layer === 'regimes') params.set('layer', 'regimes')
+  if (feature) params.set('tab', feature)
+  const text = params.toString().replace(/%2C/g, ',')
   try {
-    history.replaceState(null, '', '#' + params.toString().replace(/%2C/g, ','))
+    history.replaceState(null, '', text ? '#' + text : location.pathname + location.search)
   } catch (err) { /* some embedded viewers do not allow this; the app still works */ }
 }
 
+// Change the state, then redraw. Every button and control ends up here.
 function update(changes, fromAudio = false) {
   if (!fromAudio) listening?.stop()
-  if (changes.area) state.hasArea = true   // any chosen area (search, example, map click, typed edges) ends the plain globe
+  if (changes.area) {
+    state.hasArea = true
+    if (!('label' in changes)) state.label = null   // the box was moved by hand, so the old name no longer fits
+  }
   Object.assign(state, changes)
   // a selected month must be inside the selected years
-  if (state.month) {
+  if (state.month && ready) {
     const y = Number(state.month.slice(0, 4))
     if (y < state.fromYear || y > state.toYear) state.month = null
   }
@@ -89,9 +140,12 @@ function update(changes, fromAudio = false) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+const sameBox = (a, b) => a.every((v, i) => v === b[i])
+
 function areaName() {
-  const preset = CONFIG.presets.find(p => p.box.every((v, i) => v === state.area[i]))
-  return preset ? preset.name : 'Custom area'
+  if (state.label) return state.label
+  const saved = [...settings.favourites, ...CONFIG.presets].find(p => sameBox(p.box, state.area))
+  return saved ? saved.name : 'Custom area'
 }
 function degrees(v, positive, negative) {
   return `${Math.abs(v)}°${v < 0 ? negative : positive}`
@@ -99,6 +153,10 @@ function degrees(v, positive, negative) {
 function areaText() {
   const [s, w, n, e] = state.area
   return `${degrees(s, 'N', 'S')} to ${degrees(n, 'N', 'S')}, ${degrees(w, 'E', 'W')} to ${degrees(e, 'E', 'W')}`
+}
+// the place name if there is one, otherwise the edges of the box
+function areaTitle() {
+  return areaName() === 'Custom area' ? areaText() : areaName()
 }
 function focus() {
   if (!state.month) return null
@@ -115,34 +173,31 @@ function setPressed(selector, attribute, value) {
 // Render: redraw everything from the state
 // ---------------------------------------------------------------------------
 function render() {
+  // these parts do not need the data file
+  setPressed('[data-metric]', 'metric', state.metric)
+  setPressed('[data-mode]', 'mode', state.mode)
+  setPressed('[data-layer]', 'layer', state.layer)
+  document.body.classList.toggle('is-plain', !state.hasArea)
+  mapView.setPlain(!state.hasArea)
+  if (state.hasArea) mapView.setArea(state.area)
+  $('areaPill').hidden = !state.hasArea
+  $('areaPillText').textContent = areaTitle()
+  drawStar()
+  renderPanel()
+  if (!ready) return
+
   const picked = focus()
   const totals = monthlyTotals(state.area)
   table = buildTable(totals, state.metric, state.fromYear, state.toYear)
   const cellsInside = cellsInArea(state.area).reduce((a, b) => a + b, 0)
 
-  // --- controls show the current state ---
-  $('areaError').hidden = true
-  document.querySelectorAll('#presetChips button').forEach(b => b.setAttribute('aria-pressed', String(b.textContent === areaName())))
-  $('south').value = state.area[0]; $('west').value = state.area[1]
-  $('north').value = state.area[2]; $('east').value = state.area[3]
   $('fromYear').value = state.fromYear; $('toYear').value = state.toYear
-  setPressed('[data-metric]', 'metric', state.metric)
-  setPressed('[data-mode]', 'mode', state.mode)
-  setPressed('[data-layer]', 'layer', state.layer)
 
-  // --- map: a plain globe until a place is chosen ---
-  mapView.setPlain(!state.hasArea)
-  document.body.classList.toggle('is-plain', !state.hasArea)
-  renderFeatureWindow()
-  mapView.setArea(state.area)
-  const first = picked ? monthIndex(state.month) : Math.max(0, monthIndex(`${state.fromYear}-01`))
-  const lastKey = `${state.toYear}-12`
-  const last = picked ? first : (monthIndex(lastKey) >= 0 ? monthIndex(lastKey) : data.months.length - 1)
-  const period = picked ? `${MONTHS[picked.month]} ${picked.year}` : `${state.fromYear} to ${state.toYear}`
+  // --- map ---
   drawMapPeriod(picked)
   mapView.showLayer(state.layer)
 
-  // --- verdict ---
+  // --- summary sentence ---
   renderVerdict(picked, totals, cellsInside)
 
   // --- calendar ---
@@ -152,7 +207,7 @@ function render() {
   })
   renderAnomalies()
 
-  listening?.update(table, picked, JSON.stringify([state.area,state.fromYear,state.toYear,state.metric]), cellsInside > 0, state.mode)
+  listening?.update(table, picked, JSON.stringify([state.area, state.fromYear, state.toYear, state.metric]), cellsInside > 0, state.mode)
 
   // --- season chart ---
   const overview = overviewVerdict(table)
@@ -165,13 +220,6 @@ function render() {
   drawSeasonChart($('seasonChart'), table, chartYear)
 
   renderRegimes()
-
-  // --- export text ---
-  const csv = rowsAsCsv(state.area, first, last)
-  $('exportText').textContent = csv.rows
-    ? `${formatNumber(csv.rows)} rows: every grid cell and month with hotspots in ${areaName() === 'Custom area' ? 'the selected area' : areaName()}, ${period}.`
-    : 'There are no hotspots in this area and period, so there is nothing to export.'
-  $('downloadButton').disabled = $('copyCsvButton').disabled = !csv.rows
 }
 
 // what the map shows: the month being played, a picked month, one slider year, or the selected years
@@ -195,23 +243,28 @@ function drawMapPeriod(picked) {
   mapView.setCells(cellTotals(first, last), state.metric, period)
   $('mapYearText').textContent = playingAt || picked || state.mapYear ? period : 'All years'
   const year = playingAt ? playingAt.year : picked ? picked.year : state.mapYear
-  // satellite picture for the same period: mid-month of the shown month, or August of a shown year
-  // with no month chosen: the area's biggest fire month (in the shown year, if one is shown)
-  let showY = year, showM = playingAt ? playingAt.month : picked ? picked.month : null
-  if (showM === null && table) {
+  $('mapYear').value = year ? year - data.firstYear + 1 : 0
+
+  // The burn view shows a satellite picture from the same time: the shown month, or
+  // with no month chosen, the area's biggest fire month (of the shown year, if there is one).
+  let showYear = year, showMonth = playingAt ? playingAt.month : picked ? picked.month : null
+  if (showMonth === null && table) {
     let best = -1
-    table.years.forEach((y, r) => {
+    table.years.forEach((y, row) => {
       if (year && y !== year) return
-      for (let m = 0; m < 12; m++) { const v = table.value[r][m]; if (v > best) { best = v; showY = y; showM = m } }
+      for (let m = 0; m < 12; m++) {
+        const v = table.value[row][m]
+        if (v > best) { best = v; showYear = y; showMonth = m }
+      }
     })
   }
-  if (showM === null) { showY = year || state.toYear; showM = 7 }
-  // while Play runs, keep the satellite picture still: reloading it every month made the map flicker
-  if (!playingAt) mapView.setImageryDate(`${showY}-${String(showM + 1).padStart(2, '0')}-15`)
-  $('mapYear').value = year ? year - data.firstYear + 1 : 0
+  if (showMonth === null) { showYear = year || state.toYear; showMonth = 7 }
+  // while Play runs the picture stays still: reloading it every month would flicker
+  if (!playingAt) mapView.setImageryDate(`${showYear}-${String(showMonth + 1).padStart(2, '0')}-15`)
+  $('imageryDate').textContent = mapView.imageryPeriod()
 }
 
-// data confidence badge: real observations or model estimates
+// "Real satellite observations" or "Partly estimated" next to the place name
 function confidenceBadge() {
   const est = table.years.filter((_, i) => table.yearEstimated[i] >= 0.5)
   if (est.length) {
@@ -222,19 +275,19 @@ function confidenceBadge() {
 
 function renderVerdict(picked, totals, cellsInside) {
   const el = $('verdict')
-  const where = `<p class="verdict-where"><b>${areaName()}</b><span>${areaText()}</span>${cellsInside ? confidenceBadge() : ''}</p>`
+  const where = `<p class="verdict-where"><span>${areaText()}</span>${cellsInside ? confidenceBadge() : ''}</p>`
 
   if (cellsInside === 0) {
     el.className = 'verdict level-none'
     el.innerHTML = where +
-      '<h1 class="verdict-sentence">There is no data for this area yet.</h1>' +
-      '<p class="verdict-help">No satellite detected a fire here, or the box is over the sea. Drag the box onto land, or search for a place.</p>'
+      '<h3 class="verdict-sentence">There is no data for this area.</h3>' +
+      '<p class="verdict-help">No satellite detected a hotspot here, or the box is over the sea. Drag the box onto land, or search for a place.</p>'
     return
   }
 
   if (picked && !Number.isFinite(table.value[picked.year - table.years[0]]?.[picked.month])) {
     el.className = 'verdict level-none'
-    el.innerHTML = where + `<h1 class="verdict-sentence">No data for ${MONTHS[picked.month]} ${picked.year}.</h1>` +
+    el.innerHTML = where + `<h3 class="verdict-sentence">No data for ${MONTHS[picked.month]} ${picked.year}.</h3>` +
       '<p class="verdict-help">Missing observations do not mean zero activity.</p><button type="button" class="link" id="clearMonth">Back to all years</button>'
     $('clearMonth').onclick = () => update({ month: null })
     return
@@ -246,7 +299,7 @@ function renderVerdict(picked, totals, cellsInside) {
     const estimated = v.estimatedShare >= 0.5
     el.className = `verdict level-${v.level}`
     el.innerHTML = where +
-      `<h1 class="verdict-sentence">${v.sentence}</h1>` +
+      `<h3 class="verdict-sentence">${v.sentence}</h3>` +
       '<div class="verdict-side">' +
         `<p class="level"><i class="level-icon" aria-hidden="true"></i>${LEVEL_TEXT[v.level]}</p>` +
         `<p class="score"><span class="score-number">${v.level === 'none' ? 'n/a' : formatScore(v.score)}</span><span class="score-label">How unusual</span></p>` +
@@ -276,7 +329,7 @@ function renderVerdict(picked, totals, cellsInside) {
       `<button type="button" class="link" id="seeTop">See ${MONTHS[o.top.month]} ${o.top.year}</button>` +
       '</div>'
   }
-  el.innerHTML = where + `<h1 class="verdict-sentence">${o.sentence}</h1>` + side +
+  el.innerHTML = where + `<h3 class="verdict-sentence">${o.sentence}</h3>` + side +
     '<dl class="facts">' +
       `<div><dt>${state.metric === 'frp' ? 'Fire energy' : 'Hotspots'}, ${state.fromYear} to ${state.toYear}</dt><dd>${formatValue(table.total, state.metric)}</dd></div>` +
       `<div><dt>Usual year</dt><dd>${formatValue(table.usualYear, state.metric)}</dd></div>` +
@@ -297,16 +350,35 @@ function scoreMeter(z) {
   return `<div class="meter" aria-hidden="true">${blocks}<b style="left:${at.toFixed(1)}%"></b></div>`
 }
 
+// the most unusual months of the selected area, for the Anomalies panel
+function renderAnomalies() {
+  const items = []
+  table.years.forEach((year, row) => {
+    for (let m = 0; m < 12; m++) {
+      const z = table.score[row][m], v = table.value[row][m]
+      if (Number.isFinite(z) && z >= CONFIG.unusualSigma && v > 0) items.push({ year, m, z, v, usual: table.usual[m].median })
+    }
+  })
+  items.sort((a, b) => b.z - a.z)
+  const unit = state.metric === 'frp' ? 'fire energy' : 'hotspots'
+  const fmt = v => state.metric === 'frp' ? formatPower(v) : formatNumber(v)
+  $('anomalyList').innerHTML = items.length
+    ? items.slice(0, 10).map(a => `<li><button type="button" data-month="${monthKey(a.year, a.m)}" aria-pressed="${state.month === monthKey(a.year, a.m)}">
+        <span class="an-when">${MONTHS[a.m]} ${a.year}</span>
+        <span class="an-score">+${a.z.toFixed(1)}σ</span>
+        <span class="an-detail">${fmt(a.v)} ${unit}; a usual ${MONTHS[a.m]} has ${fmt(a.usual)}</span>
+      </button></li>`).join('')
+    : `<li class="an-none">No month here was ${CONFIG.unusualSigma}σ or more above usual between ${state.fromYear} and ${state.toYear}.</li>`
+  $('anomalyList').querySelectorAll('button').forEach(b => {
+    b.onclick = () => update({ month: state.month === b.dataset.month ? null : b.dataset.month })
+  })
+}
+
 // ---------------------------------------------------------------------------
-// Fire regimes panel (Pearl's files)
+// Patterns panel: the fire regimes inside the selected area
 // ---------------------------------------------------------------------------
-function renderRegimes() {
-  const body = $('regimeBody')
-  if (!regimes) {
-    body.innerHTML = '<p class="empty">No regime layer found. Run <code>python -m analysis.fire_regimes.run</code> to create <code>public/data/fire_regimes.geojson</code>.</p>'
-    return
-  }
-  // count the cells of each regime inside the selected area
+// counts the cells of each regime inside the selected area
+function regimesInArea() {
   const [south, west, north, east] = state.area
   const counts = new Map()
   let total = 0, shifted = 0
@@ -318,82 +390,276 @@ function renderRegimes() {
     total++
     if (f.properties.shifted) shifted++
   }
-  if (!total) {
+  return {
+    total, shifted,
+    sorted: [...counts.entries()].sort((a, b) => b[1] - a[1]),
+    summaries: new Map(((regimes.summary && regimes.summary.regimes) || []).map(r => [r.regime_id, r])),
+    names: new Map(regimes.geojson.features.map(f => [f.properties.regime_id, f.properties])),
+  }
+}
+
+function renderRegimes() {
+  const body = $('regimeBody')
+  if (!regimes) {
+    body.innerHTML = '<p class="empty">No regime layer found. Run <code>python -m analysis.fire_regimes.run</code> to create <code>public/data/fire_regimes.geojson</code>.</p>'
+    return
+  }
+  const r = regimesInArea()
+  if (!r.total) {
     body.innerHTML = '<p class="empty">No regime cells in this area.</p>'
     return
   }
 
-  const summaries = new Map(((regimes.summary && regimes.summary.regimes) || []).map(r => [r.regime_id, r]))
-  const names = new Map(regimes.geojson.features.map(f => [f.properties.regime_id, f.properties]))
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-
   let html = '<ul class="regimes">'
-  for (const [id, n] of sorted) {
-    const s = summaries.get(id), p = names.get(id)
-    const color = (s && s.color) || p.color || '#999'
+  for (const [id, n] of r.sorted) {
+    const s = r.summaries.get(id), p = r.names.get(id)
     html += '<li>' +
-      `<i class="regime-swatch" style="background:${color}"></i>` +
-      `<div class="regime-text"><h3>${p.regime_name}</h3>${s && s.summary ? `<p>${s.summary}</p>` : ''}</div>` +
-      `<div class="regime-side"><b>${Math.round(n / total * 100)}%</b><span>of cells</span>${s && s.monthly_curve ? monthShape(s.monthly_curve, '#B9C4BC') : ''}</div>` +
+      `<i class="regime-swatch" style="background:${regimeColor(id, (s && s.color) || p.color)}"></i>` +
+      `<div class="regime-text"><h4>${p.regime_name}</h4>${s && s.summary ? `<p>${s.summary}</p>` : ''}</div>` +
+      `<div class="regime-side"><b>${Math.round(n / r.total * 100)}%</b><span>of cells</span>${s && s.monthly_curve ? monthShape(s.monthly_curve, '#9AA8A0') : ''}</div>` +
       '</li>'
   }
   html += '</ul>'
 
   let note = ''
-  if (shifted) note += `${shifted} of ${total} cells here changed regime over the years. `
-  const check = regimes.summary && regimes.summary.validation && regimes.summary.validation.kmeans
-  if (check && check.silhouette !== undefined) {
-    note += 'Regimes blend into each other at their edges, so treat the borders between them as approximate. '
-  }
-  note += 'Click any coloured square on the regime map for its story.'
-  html += `<div class="panel-foot"><button type="button" class="button" id="regimeToggle">${state.layer === 'regimes' ? 'Show hotspots on the map' : 'Show regimes on the map'}</button>` +
-    `<a class="button" href="${CONFIG.files.regimes}" download="fire_regimes.geojson">Download regime map (GeoJSON)</a>${note ? `<p>${note}</p>` : ''}</div>`
+  if (r.shifted) note += `${r.shifted} of ${r.total} cells here changed regime over the years. `
+  note += 'Regimes blend into each other at their edges, so treat the borders as approximate. Click any square on the map for its story.'
+  html += '<div class="panel-foot">' +
+    `<a class="button" href="${CONFIG.files.regimes}" download="fire_regimes.geojson">Download regime map (GeoJSON)</a><p>${note}</p></div>`
   body.innerHTML = html
-  $('regimeToggle').onclick = () => update({ layer: state.layer === 'regimes' ? 'hotspots' : 'regimes' })
 }
 
 function regimeStory(p) {
   const s = regimes && regimes.summary && (regimes.summary.regimes || []).find(r => r.regime_id === p.regime_id)
-  let html = `<div class="story"><p class="story-name"><i style="background:${p.color}"></i>${p.regime_name}</p>`
+  const color = regimeColor(p.regime_id, p.color)
+  let html = `<div class="story"><p class="story-name"><i style="background:${color}"></i>${p.regime_name}</p>`
   if (s && s.summary) html += `<p>${s.summary}</p>`
-  if (s && s.monthly_curve) html += `<div class="story-curve">${monthShape(s.monthly_curve, p.color)}</div>`
+  if (s && s.monthly_curve) html += `<div class="story-curve">${monthShape(s.monthly_curve, color)}</div>`
   if (p.hotspots_per_year !== undefined) html += `<p class="dim">This square: about ${formatNumber(p.hotspots_per_year)} hotspots a year${p.peak_month ? `, peak in ${MONTHS[p.peak_month - 1]}` : ''}.</p>`
   if (p.shifted) html += `<p class="story-shift">Changed over time: was "${p.shift_from}", now "${p.shift_to}".</p>`
   return html + '</div>'
 }
 
 // ---------------------------------------------------------------------------
-// Forecast and validation panels (drawn once; they do not depend on the area yet)
+// Forecast and About panels (drawn once; they do not depend on the area)
 // ---------------------------------------------------------------------------
-function renderForecast(forecast) {
-  // the panel only appears once a real forecast file exists (Snavya's model)
-  const real = forecast && !forecast.is_demo && forecast.days && forecast.days.length
-  $('forecastPanel').hidden = !real
+function renderForecast() {
+  const f = forecastData
+  // the Forecast tab only appears when there is a real forecast file
+  const real = f && !f.is_demo && f.days && f.days.length
+  $('forecastTab').hidden = !real
   if (!real) return
-  $('forecastSub').textContent = `${forecast.region || 'Whole data region'}, ${forecast.unit || 'hotspots per day'}.`
-  $('forecastBody').innerHTML =
+  $('forecastSub').textContent = `${f.unit || 'Hotspots per day'}.`
+  let html =
     '<div class="chart-key"><span><i class="key-usual is-solid"></i>Expected</span><span><i class="key-band"></i>Likely range</span><span><i class="key-dot"></i>Actual</span></div>' +
     '<div class="chart" id="forecastChart"></div>'
-  drawForecastChart($('forecastChart'), forecast)
+  // the newest forecast, if the file has one
+  if (f.live) {
+    const tile = (label, part) => part
+      ? `<li><p class="check-value">${formatNumber(part.expected)}<span>hotspots</span></p><p class="check-label">${label}</p><p class="check-detail">Likely between ${formatNumber(part.low)} and ${formatNumber(part.high)}</p></li>`
+      : ''
+    html += `<ul class="checks">${tile('Next 7 days', f.live.next_7_days)}${tile('Next 30 days', f.live.next_30_days)}</ul>` +
+      `<p class="note">Forecast made on ${f.live.made_on}.</p>`
+  }
+  if (f.note) html += `<p class="note">${f.note}</p>`
+  $('forecastBody').innerHTML = html
+  drawForecastChart($('forecastChart'), f)
 }
 
-function renderValidation(validation) {
-  const real = validation && !validation.is_demo && validation.metrics && validation.metrics.length
+function renderValidation() {
+  const v = validationData
+  const real = v && !v.is_demo && v.metrics && v.metrics.length
   $('validationPanel').hidden = !real
   if (!real) return
-  $('validationSub').textContent = (validation.note || '') +
-    (validation.overlap_period ? ` Overlap period: ${validation.overlap_period}.` : '')
-  $('validationBody').innerHTML = '<ul class="checks">' + validation.metrics.map(m =>
+  $('validationSub').textContent = (v.note || '') + (v.overlap_period ? ` Overlap period: ${v.overlap_period}.` : '')
+  $('validationBody').innerHTML = '<ul class="checks">' + v.metrics.map(m =>
     `<li><p class="check-value">${m.value}<span>${m.unit || ''}</span></p><p class="check-label">${m.label}</p>${m.detail ? `<p class="check-detail">${m.detail}</p>` : ''}</li>`).join('') + '</ul>'
+}
+
+// ---------------------------------------------------------------------------
+// Pages and panels
+// ---------------------------------------------------------------------------
+function markSidebar() {
+  document.querySelectorAll('.side-item').forEach(b => {
+    const on = feature ? b.dataset.feature === feature : b.dataset.page === page
+    b.setAttribute('aria-current', on ? 'true' : 'false')
+  })
+}
+
+// the panel beside the map: which group of sections is showing, and its title
+function renderPanel() {
+  $('featureWindow').hidden = !feature
+  if (!feature) return
+  $('featureTitle').textContent = PANELS[feature]
+  const empty = NEEDS_AREA.includes(feature) && !state.hasArea
+  $('featureEmpty').hidden = !empty
+  let where = ''
+  if (feature === 'forecast' && forecastData) where = forecastData.region || ''
+  else if (!empty && NEEDS_AREA.includes(feature) && ready) where = `${areaTitle()} · ${state.fromYear} to ${state.toYear}`
+  $('featureWhere').textContent = where
+  document.querySelectorAll('.pw-group').forEach(group => {
+    group.classList.toggle('is-open', !empty && group.dataset.group.split(' ').includes(feature))
+  })
+}
+
+// Go to a page, and open a panel (or none). All navigation comes through here.
+function show(nextPage, nextFeature = null) {
+  if (nextPage === 'home') nextFeature = null
+  const pageChanges = nextPage !== page
+  const panelOpensOrCloses = !!nextFeature !== !!feature
+
+  const change = () => {
+    if (feature === 'listen' && nextFeature !== 'listen') listening?.stop()
+    page = nextPage
+    feature = nextFeature
+    document.body.dataset.page = page
+    flames.setActive(page === 'home')
+    // Patterns are the fire regimes, so the map switches to that layer (and back for the others)
+    if (feature === 'patterns' && regimes && state.layer !== 'regimes') update({ layer: 'regimes' })
+    else if (['trends', 'anomalies', 'listen'].includes(feature) && state.layer !== 'hotspots') update({ layer: 'hotspots' })
+    renderPanel()
+    markSidebar()
+    writeAddress()
+    if (pageChanges) window.scrollTo(0, 0)
+    if (nextFeature) $('featureBody').scrollTop = 0
+    // the map just changed size (new page, or the panel took some of its room): fit it again
+    if (page === 'map' && (pageChanges || panelOpensOrCloses)) {
+      mapView.refresh()
+      if (state.hasArea) { mapView.setArea(state.area); mapView.fitArea() }
+      else if (pageChanges) mapView.showWorld()
+    }
+    if (page === 'map' && pageChanges) showTip(false)
+  }
+
+  // moving between Home and the map, the browser animates the logo into the corner
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (pageChanges && document.startViewTransition && !calm) document.startViewTransition(change)
+  else change()
+}
+
+function openFeature(name) { show('map', name) }
+function closeFeature() { show(page, null) }
+
+// a short tip on the map that fades away (shown once, or again from the menu)
+const MAP_TIP = 'Click the map to pick a place. Drag the box to move it, or a corner to resize it. Shift + drag draws a new box.'
+let tipTimer = null
+function showTip(force, text = MAP_TIP) {
+  if (!force && loadPref('tipSeen', false)) return
+  const tip = $('mapHint')
+  tip.textContent = text
+  tip.hidden = false
+  requestAnimationFrame(() => tip.classList.add('is-shown'))
+  clearTimeout(tipTimer)
+  tipTimer = setTimeout(() => { tip.classList.remove('is-shown'); setTimeout(() => { tip.hidden = true }, 400) }, 6500)
+  if (text === MAP_TIP) savePref('tipSeen', true)
+}
+
+// ---------------------------------------------------------------------------
+// Places: search results, favourites, suggestions
+// ---------------------------------------------------------------------------
+// Show a place that was searched for or picked from a chip.
+function goTo(place) {
+  // no outline (a town, a point): use a box around it
+  let [s, w, n, e] = place.box || [place.lat - 3, place.lon - 5, place.lat + 3, place.lon + 5]
+  // make small places big enough to hold a few grid squares
+  const minLat = CONFIG.cellSize * 2, minLon = CONFIG.cellSize * 3
+  if (n - s < minLat) { const mid = (s + n) / 2; s = mid - minLat / 2; n = mid + minLat / 2 }
+  if (e - w < minLon) { const mid = (w + e) / 2; w = mid - minLon / 2; e = mid + minLon / 2 }
+  const round = v => Math.round(v * 10) / 10
+  const area = [round(Math.max(-89, s)), round(Math.max(-180, w)), round(Math.min(89, n)), round(Math.min(180, e))]
+  update({ area, label: place.name === 'Custom area' ? null : place.name, month: null })
+  show('map', feature)
+  mapView.fitArea()
+}
+
+const savedPlaces = () => [...settings.favourites, ...CONFIG.presets]
+  .map(p => ({ name: p.name, detail: settings.favourites.includes(p) ? 'Favourite' : 'Suggested', box: p.box, lat: (p.box[0] + p.box[2]) / 2, lon: (p.box[1] + p.box[3]) / 2 }))
+
+const isFavourite = () => settings.favourites.some(f => sameBox(f.box, state.area))
+
+function drawStar() {
+  const on = state.hasArea && isFavourite()
+  $('starButton').setAttribute('aria-pressed', String(on))
+  $('starButton').title = on ? 'Remove from favourites' : 'Add to favourites'
+}
+
+function toggleFavourite() {
+  if (isFavourite()) settings.favourites = settings.favourites.filter(f => !sameBox(f.box, state.area))
+  else settings.favourites = [...settings.favourites, { name: areaTitle(), box: [...state.area] }]
+  savePref('favourites', settings.favourites)
+  drawStar()
+  drawPlaceChips()
+}
+
+// Home: favourites under the search box, or suggested places if there are none yet
+function drawPlaceChips() {
+  const chips = $('placeChips')
+  const star = '<svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-star"/></svg>'
+  if (settings.favourites.length) {
+    $('placesLabel').textContent = 'Favourites'
+    chips.innerHTML = settings.favourites.map((f, i) =>
+      `<span class="chip is-favourite"><button type="button" data-go="${i}">${star}${f.name}</button>` +
+      `<button type="button" class="chip-remove" data-remove="${i}" title="Remove ${f.name}"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#i-close"/></svg><span class="visually-hidden">Remove ${f.name}</span></button></span>`).join('')
+  } else {
+    $('placesLabel').textContent = 'Suggested'
+    chips.innerHTML = CONFIG.presets.map((p, i) => `<button type="button" class="chip" data-go="${i}">${p.name}</button>`).join('')
+  }
+  const list = settings.favourites.length ? settings.favourites : CONFIG.presets
+  chips.querySelectorAll('[data-go]').forEach(b => {
+    b.onclick = () => { const p = list[Number(b.dataset.go)]; goTo({ name: p.name, box: p.box }) }
+  })
+  chips.querySelectorAll('[data-remove]').forEach(b => {
+    b.onclick = () => {
+      settings.favourites = settings.favourites.filter((_, i) => i !== Number(b.dataset.remove))
+      savePref('favourites', settings.favourites)
+      drawStar()
+      drawPlaceChips()
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Settings: dark mode, colour-blind colours, spoken descriptions, the side menu
+// ---------------------------------------------------------------------------
+function applySettings() {
+  document.documentElement.dataset.theme = settings.dark ? 'dark' : 'light'
+  document.body.classList.toggle('side-closed', settings.sideClosed)
+  $('sideToggle').setAttribute('aria-expanded', String(!settings.sideClosed))
+  document.querySelectorAll('[data-toggle]').forEach(b => b.setAttribute('aria-pressed', String(!!settings[b.dataset.toggle])))
+  setPressed('[data-basemap]', 'basemap', settings.basemap)
+  $('imageryKey').hidden = $('imageryCaption').hidden = settings.basemap !== 'nasa'
+}
+
+function toggleSetting(name) {
+  settings[name] = !settings[name]
+  if (name === 'dark') {
+    saveTheme(settings.dark ? 'dark' : 'light')
+    applySettings()
+    mapView.setDark(settings.dark)
+    flames.redraw()
+  } else {
+    savePref(name, settings[name])
+    applySettings()
+  }
+  if (name === 'safeColors') {
+    setPalette(settings.safeColors ? 'safe' : 'fire')
+    mapView.redrawColors()
+    render()
+  }
+  if (name === 'speech') {
+    $('audioSpeech').checked = settings.speech
+    listening?.stop()
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Buttons, menus and inputs
 // ---------------------------------------------------------------------------
 function flash(button, text) {
-  const before = button.textContent
-  button.textContent = text
-  setTimeout(() => { button.textContent = before }, 1600)
+  const label = button.querySelector('span') || button
+  const before = label.textContent
+  label.textContent = text
+  setTimeout(() => { label.textContent = before }, 1600)
 }
 
 async function copyText(text) {
@@ -414,145 +680,7 @@ function currentCsv() {
   return { ...rowsAsCsv(state.area, first, last), name }
 }
 
-function wireSearch(input, results, onPick) {
-  let hits = []
-  const close = () => { results.hidden = true; input.setAttribute('aria-expanded', 'false') }
-  const pick = place => { input.value = ''; close(); onPick(place) }
-  input.oninput = () => {
-    const q = input.value.trim().toLowerCase()
-    if (q.length < 2) { close(); return }
-    const seen = new Set()
-    hits = mapView.getPlaces()
-      .filter(p => p.name && p.name.toLowerCase().includes(q) && !seen.has(p.name) && seen.add(p.name))
-      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.rank - b.rank)
-      .slice(0, 8)
-    results.innerHTML = hits.length
-      ? hits.map((p, i) => `<li role="option" data-i="${i}">${p.name}<span>${degrees(Math.round(p.lat * 10) / 10, 'N', 'S')}, ${degrees(Math.round(p.lon * 10) / 10, 'E', 'W')}</span></li>`).join('')
-      : '<li class="none">No place with that name yet. Try a nearby city.</li>'
-    results.hidden = false
-    input.setAttribute('aria-expanded', 'true')
-  }
-  input.onkeydown = e => {
-    if (e.key === 'Enter') { e.preventDefault(); if (hits[0]) pick(hits[0]) }
-    if (e.key === 'Escape') close()
-  }
-  results.onmousedown = e => {
-    const li = e.target.closest('li[data-i]')
-    if (li) { e.preventDefault(); pick(hits[Number(li.dataset.i)]) }
-  }
-  input.onblur = () => setTimeout(close, 150)
-}
-
-// the search screen and the app
-// ---------------------------------------------------------------------------
-// Pages (sidebar): Home and Fire Map; features open as a window over the map
-// ---------------------------------------------------------------------------
-const FEATURES = {
-  trends: 'Trends',
-  anomalies: 'Anomalies',
-  patterns: 'Patterns',
-  listen: 'Listen to the data',
-  about: 'About the data',
-}
-
-function markSidebar() {
-  document.querySelectorAll('.side-item').forEach(b => {
-    const on = feature ? b.dataset.feature === feature : b.dataset.page === page
-    b.setAttribute('aria-current', on ? 'true' : 'false')
-  })
-}
-
-function setPage(next) {
-  const was = page
-  page = next
-  document.body.classList.toggle('page-home', page === 'home')
-  document.body.classList.toggle('page-map', page === 'map')
-  if (page === 'home') closeFeature()
-  markSidebar()
-  writeAddress()
-  window.scrollTo(0, 0)
-  if (page === 'map' && was !== 'map') {
-    // wait for the layout to settle before sizing the map and zooming
-    requestAnimationFrame(() => setTimeout(() => {
-      mapView.refresh()
-      if (state.hasArea) { mapView.fitArea(); showTip(false) } else mapView.showWorld()
-    }, 60))
-  }
-  if (page === 'home') $('heroSearch').focus()
-}
-
-function openFeature(name) {
-  feature = name
-  // Patterns are the fire regimes, so the map switches to that layer (and back for the others)
-  if (name === 'patterns' && regimes && state.layer !== 'regimes') update({ layer: 'regimes' })
-  else if ((name === 'trends' || name === 'anomalies') && state.layer !== 'hotspots') update({ layer: 'hotspots' })
-  if (page !== 'map') setPage('map')
-  renderFeatureWindow()
-  markSidebar()
-  $('featureBody').scrollTop = 0
-}
-
-function closeFeature() {
-  if (feature === 'listen') listening?.stop()
-  feature = null
-  renderFeatureWindow()
-  markSidebar()
-}
-
-function renderFeatureWindow() {
-  const win = $('featureWindow')
-  win.hidden = !feature
-  if (!feature) return
-  $('featureTitle').textContent = FEATURES[feature]
-  const needsArea = feature !== 'about'
-  const empty = needsArea && !state.hasArea
-  $('featureEmpty').hidden = !empty
-  $('featureWhere').textContent = empty || !needsArea ? '' : `${areaName() === 'Custom area' ? areaText() : areaName()} · ${state.fromYear} to ${state.toYear}`
-  document.querySelectorAll('.fw-group').forEach(g => g.classList.toggle('is-open', !empty && g.dataset.group === feature))
-}
-
-// the most unusual months of the selected area, for the Anomalies window
-function renderAnomalies() {
-  const items = []
-  table.years.forEach((year, row) => {
-    for (let m = 0; m < 12; m++) {
-      const z = table.score[row][m], v = table.value[row][m]
-      if (Number.isFinite(z) && z >= 2 && v > 0) items.push({ year, m, z, v, usual: table.usual[m].median })
-    }
-  })
-  items.sort((a, b) => b.z - a.z)
-  const unit = state.metric === 'frp' ? 'fire energy' : 'hotspots'
-  const fmt = v => state.metric === 'frp' ? formatPower(v) : formatNumber(v)
-  $('anomalyList').innerHTML = items.length
-    ? items.slice(0, 8).map(a => `<li><button type="button" data-month="${monthKey(a.year, a.m)}" aria-pressed="${state.month === monthKey(a.year, a.m)}">
-        <span class="an-when">${MONTHS[a.m]} ${a.year}</span>
-        <span class="an-score">+${a.z.toFixed(1)}σ</span>
-        <span class="an-detail">${fmt(a.v)} ${unit}; a usual ${MONTHS[a.m]} has ${fmt(a.usual)}</span>
-      </button></li>`).join('')
-    : `<li class="an-none">No month here was 2σ or more above usual between ${state.fromYear} and ${state.toYear}.</li>`
-  $('anomalyList').querySelectorAll('button').forEach(b => {
-    b.onclick = () => update({ month: state.month === b.dataset.month ? null : b.dataset.month })
-  })
-}
-
-function showApp() { setPage('map') }
-// a short tip on the map that fades away (shown once, or again from the menu)
-let tipTimer = null
-function showTip(force) {
-  let seen = false
-  try { seen = localStorage.getItem('emberTipSeen') === '1' } catch (err) { /* storage may be blocked */ }
-  if (seen && !force) return
-  const tip = $('mapHint')
-  tip.hidden = false
-  requestAnimationFrame(() => tip.classList.add('is-shown'))
-  clearTimeout(tipTimer)
-  tipTimer = setTimeout(() => { tip.classList.remove('is-shown'); setTimeout(() => { tip.hidden = true }, 400) }, 6500)
-  try { localStorage.setItem('emberTipSeen', '1') } catch (err) { /* fine */ }
-}
-
-function showStart() { setPage('home') }
-
-function stopListening() {
+function stopPlaying() {
   stopCalendar()
   markPlaying($('calendar'), null)
   playingAt = null
@@ -568,42 +696,127 @@ function startPlaying() {
     if (row === null || row === undefined) return
     playingAt = { year: table.years[row], month: Number.isInteger(month) ? month : 0 }
     drawMapPeriod(focus())
-  }, stopListening)
+  }, stopPlaying)
 }
 
-function wireControls() {
-  // example areas as chips (on the search screen)
-  const chips = $('presetChips')
-  chips.innerHTML = [...CONFIG.presets.map(p => p.name), 'Whole world']
-    .map(n => `<button type="button" class="chip" aria-pressed="false">${n}</button>`).join('')
-  chips.querySelectorAll('button').forEach(b => {
+// Things that work before the data file has loaded: moving around, search, settings.
+function wireShell() {
+  // side menu, Home buttons, and the logo
+  // on a phone the menu covers the page, so it closes again once you have picked something
+  const closeMenuOnPhone = () => { if (window.innerWidth < 760 && !settings.sideClosed) toggleSetting('sideClosed') }
+  document.querySelectorAll('button[data-page]').forEach(b => {
+    b.onclick = () => { closeMenuOnPhone(); show(b.dataset.page) }
+  })
+  document.querySelectorAll('[data-feature]').forEach(b => {
+    b.onclick = () => { closeMenuOnPhone(); feature === b.dataset.feature ? closeFeature() : openFeature(b.dataset.feature) }
+  })
+  $('featureClose').onclick = closeFeature
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && feature && !event.target.closest('input, select')) closeFeature()
+  })
+
+  $('sideToggle').onclick = () => toggleSetting('sideClosed')
+  document.querySelectorAll('[data-toggle]').forEach(b => { b.onclick = () => toggleSetting(b.dataset.toggle) })
+  document.querySelectorAll('[data-basemap]').forEach(b => {
     b.onclick = () => {
-      const preset = CONFIG.presets.find(p => p.name === b.textContent)
-      update({ area: [...(preset ? preset.box : data.bounds)] })
-      showApp(); mapView.fitArea()
+      settings.basemap = b.dataset.basemap
+      savePref('basemap', settings.basemap)
+      applySettings()
+      mapView.setBasemap(settings.basemap)
     }
   })
 
-  // place search: the place names the map already has, no outside service
-  const goTo = place => {
-    const [s0, w0, n0, e0] = state.area
-    const hLat = Math.min(4, Math.max(1.5, (n0 - s0) / 2)), hLon = Math.min(6, Math.max(2, (e0 - w0) / 2))
-    update({ area: [place.lat - hLat, place.lon - hLon, place.lat + hLat, place.lon + hLon].map(v => Math.round(v * 10) / 10) })
-    showApp(); mapView.fitArea()
-  }
-  wireSearch($('heroSearch'), $('heroResults'), goTo)
-  wireSearch($('placeSearch'), $('placeResults'), goTo)
+  // place search (the big box on Home and the small one in the top bar)
+  const searchOptions = { getSaved: savedPlaces, getOffline: () => mapView.getPlaces(), onPick: goTo }
+  wireSearch($('heroSearch'), $('heroResults'), searchOptions)
+  wireSearch($('topSearch'), $('topResults'), searchOptions)
+  drawPlaceChips()
+  $('starButton').onclick = toggleFavourite
 
-  // Layers popover on the map (what to show, map style, key)
-  const layersPanel = $('layersPanel'), layersButton = $('layersButton')
-  layersButton.onclick = () => {
-    layersPanel.hidden = !layersPanel.hidden
-    layersButton.setAttribute('aria-expanded', String(!layersPanel.hidden))
+  // custom area: typed edges, or draw it on the map
+  const areaForm = $('areaForm'), customButton = $('customAreaButton')
+  const openAreaForm = open => { areaForm.hidden = !open; customButton.setAttribute('aria-expanded', String(open)) }
+  customButton.onclick = () => { openAreaForm(areaForm.hidden); if (!areaForm.hidden) $('north').focus() }
+  areaForm.onsubmit = event => {
+    event.preventDefault()
+    const inputs = [$('south'), $('west'), $('north'), $('east')]
+    const [s, w, n, e] = inputs.map(input => Number(input.value))
+    let problem = ''
+    if (![s, w, n, e].every(Number.isFinite) || inputs.some(input => input.value.trim() === '')) problem = 'Enter a number in all four boxes. West of Greenwich and south of the equator are negative, for example West = -119.'
+    else if (n <= s) problem = 'North must be a bigger number than South.'
+    else if (e <= w) problem = 'East must be a bigger number than West. For western Canada both are negative, for example West = -119 and East = -110.'
+    else if (s < -90 || n > 90 || w < -180 || e > 180) problem = 'Latitude goes from -90 to 90 and longitude from -180 to 180.'
+    $('areaError').hidden = !problem
+    $('areaError').textContent = problem
+    if (problem) return
+    openAreaForm(false)
+    goTo({ name: 'Custom area', box: [s, w, n, e] })
   }
-  document.addEventListener('click', e => {
-    if (!layersPanel.hidden && !e.target.closest('.map-tools')) { layersPanel.hidden = true; layersButton.setAttribute('aria-expanded', 'false') }
+  $('drawButton').onclick = () => {
+    openAreaForm(false)
+    show('map', feature)
+    // wait for the map page to be on screen before drawing on it
+    setTimeout(() => {
+      mapView.startDrawing()
+      showTip(true, 'Drag on the map to draw your area. Press Esc to cancel.')
+    }, 500)
+  }
+
+  // the ⋮ menu
+  const menu = $('appMenu'), menuButton = $('menuButton'), exportPanel = $('exportPanel')
+  const closeMenu = () => { menu.hidden = true; exportPanel.hidden = true; menuButton.setAttribute('aria-expanded', 'false') }
+  menuButton.onclick = () => {
+    const open = menu.hidden && exportPanel.hidden
+    closeMenu()
+    menu.hidden = !open
+    menuButton.setAttribute('aria-expanded', String(open))
+  }
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.kebab')) closeMenu()
+    if (!event.target.closest('.search-hero')) openAreaForm(false)
   })
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMenu(); openAreaForm(false) } })
 
+  $('shareButton').onclick = async () => {
+    const ok = await copyText(location.href)
+    flash($('shareButton'), ok ? 'Link copied' : 'Copy the address bar instead')
+  }
+  $('tipButton').onclick = () => { closeMenu(); show('map', feature); showTip(true) }
+  $('exportButton').onclick = () => {
+    menu.hidden = true
+    exportPanel.hidden = false
+    const rows = ready && state.hasArea ? currentCsv().rows : 0
+    const picked = focus()
+    const period = picked ? `${MONTHS[picked.month]} ${picked.year}` : `${state.fromYear} to ${state.toYear}`
+    $('exportText').textContent = !ready ? 'The data is still loading.'
+      : !state.hasArea ? 'Pick a place first: search, or click the map.'
+      : rows ? `${formatNumber(rows)} rows: every grid square and month with hotspots in ${areaName() === 'Custom area' ? 'the selected area' : areaName()}, ${period}.`
+      : 'There are no hotspots in this area and period, so there is nothing to download.'
+    $('downloadButton').disabled = $('copyCsvButton').disabled = !rows
+  }
+  $('downloadButton').onclick = () => {
+    const csv = currentCsv()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(new Blob([csv.text], { type: 'text/csv' }))
+    link.download = csv.name
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000)
+  }
+  $('copyCsvButton').onclick = async () => {
+    const ok = await copyText(currentCsv().text)
+    flash($('copyCsvButton'), ok ? 'Copied' : 'Could not copy')
+  }
+
+  // the two-way switches
+  document.querySelectorAll('[data-metric]').forEach(b => { b.onclick = () => update({ metric: b.dataset.metric }) })
+  document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => update({ mode: b.dataset.mode }) })
+  document.querySelectorAll('[data-layer]').forEach(b => { b.onclick = () => update({ layer: b.dataset.layer }) })
+}
+
+// Things that need the data file: years, the time slider, sound.
+function wireData() {
   // time slider on the map: 0 = the selected years, then one step per year
   const slider = $('mapYear')
   slider.max = data.lastYear - data.firstYear + 1
@@ -612,26 +825,8 @@ function wireControls() {
     update({ mapYear: v ? data.firstYear + v - 1 : null, month: null })
   }
   $('mapPlay').onclick = () => {
-    if (isPlaying()) { stopListening(); return }
+    if (isPlaying()) { stopPlaying(); return }
     startPlaying()
-  }
-
-  // typed coordinates
-  $('areaForm').onsubmit = event => {
-    event.preventDefault()
-    const s = Number($('south').value), w = Number($('west').value), n = Number($('north').value), e = Number($('east').value)
-    const error = $('areaError')
-    let problem = ''
-    if (![s, w, n, e].every(Number.isFinite) || [$('south'), $('west'), $('north'), $('east')].some(i => i.value.trim() === '')) problem = 'Enter a number in all four boxes. West of Greenwich and south of the equator are negative, for example West = -119.'
-    else if (n <= s) problem = 'North must be a bigger number than South.'
-    else if (e <= w) problem = 'East must be a bigger number than West. For western Canada both are negative, for example West = -119 and East = -110.'
-    else if (s < -90 || n > 90 || w < -180 || e > 180) problem = 'Latitude goes from -90 to 90 and longitude from -180 to 180.'
-    error.hidden = !problem
-    error.textContent = problem
-    if (problem) return
-    update({ area: [s, w, n, e] }); mapView.fitArea()
-    mapView.fitArea()
-    $('areaForm').hidden = true
   }
 
   // years
@@ -647,106 +842,150 @@ function wireControls() {
     update({ toYear: to, fromYear: Math.min(to, state.fromYear) })
   }
 
-  // the two- and three-way switches
-  document.querySelectorAll('[data-metric]').forEach(b => { b.onclick = () => update({ metric: b.dataset.metric }) })
-  document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => update({ mode: b.dataset.mode }) })
-  document.querySelectorAll('[data-layer]').forEach(b => { b.onclick = () => update({ layer: b.dataset.layer }) })
-
-  // The listening feature shares month selection with the calendar and map.
+  // The Listen panel shares month selection with the calendar and the map.
   listening = createListeningPanel({
-    onPick: (year, month) => { if (isPlaying()) stopListening(); update({ month: monthKey(year,month) }, true) },
-    onMode: mode => update({mode}),
-    onHighlight: (row, month) => markPlaying($('calendar'),row,month),
+    onPick: (year, month) => { if (isPlaying()) stopPlaying(); update({ month: monthKey(year, month) }, true) },
+    onMode: mode => update({ mode }),
+    onHighlight: (row, month) => markPlaying($('calendar'), row, month),
   })
-  // the calendar's Listen button now opens the Listen window
+  // the calendar's Listen button opens the Listen panel
   $('listenButton').onclick = () => openFeature('listen')
-  $('listenButton').removeAttribute('aria-controls'); $('listenButton').removeAttribute('aria-expanded')
-
-  // the ⋮ menu
-  const menu = $('appMenu'), menuButton = $('menuButton')
-  const panels = [$('exportPanel'), $('areaForm')]
-  const closeMenu = () => { menu.hidden = true; menuButton.setAttribute('aria-expanded', 'false') }
-  const closePanels = () => { panels.forEach(p => { p.hidden = true }); $('exportButton').setAttribute('aria-expanded', 'false'); $('coordsButton').setAttribute('aria-expanded', 'false') }
-  const openPanel = (panel, button) => { closeMenu(); closePanels(); panel.hidden = false; button.setAttribute('aria-expanded', 'true') }
-  menuButton.onclick = () => {
-    const open = menu.hidden
-    closePanels()
-    menu.hidden = !open
-    menuButton.setAttribute('aria-expanded', String(open))
-    if (open) menu.querySelector('button').focus()
+  // "Spoken descriptions" on Home and the tick box in the Listen panel are the same setting
+  const speechBox = $('audioSpeech')
+  if (speechBox.disabled) {
+    document.querySelectorAll('[data-toggle="speech"]').forEach(b => { b.disabled = true; b.title = 'This browser cannot speak text' })
+  } else {
+    speechBox.checked = settings.speech
+    speechBox.addEventListener('change', () => {
+      settings.speech = speechBox.checked
+      savePref('speech', settings.speech)
+      applySettings()
+    })
   }
-  document.addEventListener('click', event => {
-    if (!event.target.closest('.kebab')) { closeMenu(); closePanels() }
+}
+
+// ---------------------------------------------------------------------------
+// Chat box: a text summary of what is on screen, sent along with each question
+// ---------------------------------------------------------------------------
+function describeView() {
+  if (!ready) return 'The data is still loading.'
+  if (!state.hasArea) return 'No place is selected yet. The user needs to search for a place or click the map first.'
+  const noTags = html => html.replace(/<[^>]+>/g, '')
+  const totals = monthlyTotals(state.area)
+  const counts = buildTable(totals, 'count', state.fromYear, state.toYear)
+  const energy = buildTable(totals, 'frp', state.fromYear, state.toYear)
+  const lines = []
+
+  lines.push(`Area: ${areaName()} (${areaText()})`)
+  lines.push(`Years shown: ${state.fromYear} to ${state.toYear}`)
+  lines.push(`Measure picked on screen: ${state.metric === 'frp' ? 'fire energy (FRP)' : 'hotspot count'}`)
+  lines.push(`Record: ${CONFIG.observedLabel}, on a ${CONFIG.cellSize} degree grid`)
+  if (cellsInArea(state.area).reduce((a, b) => a + b, 0) === 0) {
+    lines.push('There is no data inside this area.')
+    return lines.join('\n')
+  }
+  lines.push(`Headline on screen: ${noTags(overviewVerdict(table).sentence)}`)
+  if (state.month) {
+    const picked = focus()
+    lines.push(`Selected month: ${MONTHS[picked.month]} ${picked.year}. Headline: ${noTags(monthVerdict(table, picked.year, picked.month).sentence)}`)
+  }
+
+  lines.push('')
+  lines.push('Usual month (median over all years shown): month = hotspots, fire energy')
+  for (let m = 0; m < 12; m++) {
+    lines.push(`${MONTHS[m]} = ${formatNumber(counts.usual[m].median)}, ${formatPower(energy.usual[m].median)}`)
+  }
+
+  lines.push('')
+  lines.push('Every month: year-month = hotspots, fire energy, score in sigma (compared with the same month in other years)')
+  counts.years.forEach((year, row) => {
+    for (let m = 0; m < 12; m++) {
+      const n = counts.value[row][m]
+      if (Number.isNaN(n)) continue
+      lines.push(`${monthKey(year, m)} = ${formatNumber(n)}, ${formatPower(energy.value[row][m])}, ${formatScore(counts.score[row][m])}`)
+    }
   })
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeMenu(); closePanels() } })
 
-  $('shareButton').onclick = async () => {
-    const ok = await copyText(location.href)
-    flash($('shareButton'), ok ? 'Link copied' : 'Copy the address bar instead')
-  }
-  $('exportButton').onclick = () => openPanel($('exportPanel'), $('exportButton'))
-  $('coordsButton').onclick = () => { openPanel($('areaForm'), $('coordsButton')); $('north').focus() }
-  $('aboutButton').onclick = () => { closeMenu(); openFeature('about') }
+  lines.push('')
+  lines.push('Yearly totals: year = hotspots, fire energy')
+  counts.years.forEach((year, row) => {
+    lines.push(`${year} = ${formatNumber(counts.yearTotal[row])}, ${formatPower(energy.yearTotal[row])}${counts.yearComplete[row] ? '' : ' (year not complete)'}`)
+  })
 
-  // sidebar and home cards
-  document.querySelectorAll('[data-page]').forEach(b => { b.onclick = () => { if (b.dataset.page === 'map') closeFeature(); setPage(b.dataset.page) } })
-  document.querySelectorAll('[data-feature]').forEach(b => { b.onclick = () => (feature === b.dataset.feature ? closeFeature() : openFeature(b.dataset.feature)) })
-  $('featureClose').onclick = closeFeature
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && feature && !event.target.closest('input, select')) closeFeature() })
-  $('homeButton').onclick = () => { closeMenu(); showStart() }
-  $('tipButton').onclick = () => { closeMenu(); showApp(); showTip(true) }
-  $('downloadButton').onclick = () => {
-    const csv = currentCsv()
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(new Blob([csv.text], { type: 'text/csv' }))
-    link.download = csv.name
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(link.href), 5000)
+  if (regimes) {
+    const r = regimesInArea()
+    if (r.total) {
+      lines.push('')
+      lines.push(`Fire regimes in this area (${r.total} grid cells, ${r.shifted} changed regime over the years):`)
+      for (const [id, n] of r.sorted) {
+        const s = r.summaries.get(id)
+        lines.push(`- ${r.names.get(id).regime_name}: ${Math.round(n / r.total * 100)}% of cells. ${s && s.summary ? s.summary : ''}`)
+      }
+    }
   }
-  $('copyCsvButton').onclick = async () => {
-    const ok = await copyText(currentCsv().text)
-    flash($('copyCsvButton'), ok ? 'Copied' : 'Could not copy')
+
+  if (forecastData && forecastData.days && forecastData.days.length) {
+    lines.push('')
+    lines.push(`Forecast (${forecastData.region || 'whole data region'}, ${forecastData.unit || 'hotspots per day'}):`)
+    lines.push(JSON.stringify(forecastData.days))
+    if (forecastData.live) lines.push(`Newest forecast: ${JSON.stringify(forecastData.live)}`)
   }
+  if (validationData && validationData.metrics && validationData.metrics.length) {
+    lines.push('')
+    lines.push('Check that MODIS and VIIRS agree:')
+    for (const m of validationData.metrics) lines.push(`- ${m.label}: ${m.value}${m.unit || ''}. ${m.detail || ''}`)
+  }
+  return lines.join('\n')
 }
 
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 async function start() {
-  // a shared link (with an area in it) opens straight on the map; otherwise start on the search screen
-  const firstParams = new URLSearchParams(location.hash.slice(1))
-  page = firstParams.get('area') || firstParams.get('page') === 'map' ? 'map' : 'home'
-  document.body.classList.toggle('page-home', page === 'home')
-  document.body.classList.toggle('page-map', page === 'map')
+  // a shared link (with an area or a panel in it) opens straight on the map; otherwise on Home
+  readAddress()
+  document.body.dataset.page = page
+
+  setPalette(settings.safeColors ? 'safe' : 'fire')
+  flames = startFlames($('flames'))
+  flames.setActive(page === 'home')
 
   mapView = createMap($('map'), $('mapLegend'), {
     onAreaChange: area => update({ area }),
     onRegimeClick: (props, latlng) => mapView.openPopup(regimeStory(props), latlng),
   })
-  mapView.loadBasemap()   // not awaited: the map fills in while the data loads
+  mapView.setDark(settings.dark)
+  mapView.setBasemap(settings.basemap)
+  mapView.loadPlaces()   // not awaited: only the offline search needs it
+
+  applySettings()
+  wireShell()
+  initChat(describeView)
+  render()
+  markSidebar()
 
   try {
     await loadHotspots()
   } catch (err) {
-    $('verdict').innerHTML = '<h1 class="verdict-sentence">The fire record did not load.</h1>' +
-      `<p class="verdict-help">${err.message}. If you opened index.html by double-clicking it, start a local server instead (see README).</p>`
+    $('homeStatus').textContent = `The satellite record did not load: ${err.message}. If you opened index.html by double-clicking it, start a local server instead (see README).`
+    $('verdict').innerHTML = `<p class="loading">${$('homeStatus').textContent}</p>`
     return
   }
 
-  state.fromYear = data.firstYear
-  state.toYear = data.lastYear
-  $('heroStatus').textContent = `NASA satellite fire detections for the whole world, ${data.firstYear} to ${data.lastYear}.`
-  readAddress()
-  wireControls()
+  readYears()
+  $('homeStatus').textContent = `NASA satellite hotspot detections for the whole world, ${data.firstYear} to ${data.lastYear}.`
+  wireData()
   mapView.buildCells()
+  ready = true
+  render()
 
-  // optional files: each panel explains what to add if its file is missing
+  // optional files: a panel simply stays hidden or explains what to add if its file is missing
   const [geojson, summary, forecast, validation] = await Promise.all([
     loadJson(CONFIG.files.regimes), loadJson(CONFIG.files.regimeSummary),
     loadJson(CONFIG.files.forecast), loadJson(CONFIG.files.validation),
   ])
+  forecastData = forecast
+  validationData = validation
   if (geojson && geojson.features && geojson.features.length) {
     regimes = { geojson, summary }
     mapView.setRegimes(geojson)
@@ -754,20 +993,24 @@ async function start() {
     state.layer = 'hotspots'
     document.querySelector('[data-layer="regimes"]').disabled = true
   }
-
-  mapView.setArea(state.area, { fit: state.hasArea })
-  if (!state.hasArea) mapView.showWorld()
+  renderForecast()
+  renderValidation()
   render()
-  markSidebar()
+
   // a link that opens straight on the map: size the map once the layout has settled
   if (page === 'map') requestAnimationFrame(() => setTimeout(() => {
     mapView.refresh()
-    if (state.hasArea) mapView.fitArea(); else mapView.showWorld()
+    if (state.hasArea) mapView.fitArea()
   }, 60))
-  renderForecast(forecast)
-  renderValidation(validation)
 
-  window.addEventListener('hashchange', () => { listening?.stop(); readAddress(); render() })
+  window.addEventListener('hashchange', () => {
+    listening?.stop()
+    readAddress(); readYears()
+    document.body.dataset.page = page
+    flames.setActive(page === 'home')
+    markSidebar()
+    render()
+  })
 }
 
 start()

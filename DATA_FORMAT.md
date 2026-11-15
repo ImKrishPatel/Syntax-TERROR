@@ -2,10 +2,9 @@
 
 All data files live in `public/data/`. The app loads them in the browser; there is no backend.
 `hotspots.csv`, `fire_regimes.geojson` and `regime_summary.json` are now **real data** (NASA FIRMS MODIS, whole world).
-`validation.json` holds real checks (see the numbers in it). `forecast.json` is optional: the forecast panel stays hidden until a real forecast file exists.
+`validation.json` holds real checks (see the numbers in it). `forecast.json` is optional: the Forecast tab stays hidden until a real forecast file exists.
 
 To plug in real data, replace a file with one of the same name and format, then reload the page.
-When the real hotspot record is in, set `isDemoData: false` in `js/config.js` to remove the "Demo data" tag.
 
 All values are in SI units.
 

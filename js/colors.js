@@ -1,18 +1,49 @@
-// Colour ramps. Both were picked to stay readable for colour-blind viewers:
-// the fire ramp gets steadily darker, and the "compared with usual" ramp
-// goes blue (less than usual) to grey (usual) to orange-red (more than usual).
+// Colour ramps. The fire ramp gets steadily darker, and the "compared with
+// usual" ramp goes blue (less than usual) to grey (usual) to orange-red (more).
 
-export const FIRE_RAMP = ['#F8DC78', '#F4B544', '#EB872B', '#D6531F', '#AC281C', '#6B1215']
+// There are two sets of colours. 'fire' is the normal one. 'safe' is for
+// colour-blind viewers: it avoids telling things apart by red against green.
+// setPalette() swaps them; everything that draws asks for the colours again.
+const PALETTES = {
+  fire: {
+    ramp: ['#F8DC78', '#F4B544', '#EB872B', '#D6531F', '#AC281C', '#6B1215'],
+    score: ['#2C6A99', '#8DB3CC', '#D5DAD2', '#F2BE74', '#E2862D', '#BC471E', '#761915'],
+  },
+  safe: {
+    ramp: ['#FDE725', '#7AD151', '#22A884', '#2A788E', '#414487', '#440154'],
+    score: ['#2166AC', '#92C5DE', '#DDDDDD', '#FDB863', '#E08214', '#B35806', '#7F3B08'],
+    // regime colours that stay apart for colour-blind viewers (Okabe and Ito's palette)
+    regimes: ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7', '#999999'],
+  },
+}
 
-export const SCORE_STEPS = [
-  { upTo: -1.5, color: '#2C6A99', label: 'far less' },
-  { upTo: -0.5, color: '#8DB3CC', label: 'less' },
-  { upTo: 0.5, color: '#D5DAD2', label: 'usual' },
-  { upTo: 1.5, color: '#F2BE74', label: 'more' },
-  { upTo: 2.5, color: '#E2862D', label: '' },
-  { upTo: 3.5, color: '#BC471E', label: '' },
-  { upTo: Infinity, color: '#761915', label: 'far more' },
+const SCORE_EDGES = [
+  { upTo: -1.5, label: 'far less' },
+  { upTo: -0.5, label: 'less' },
+  { upTo: 0.5, label: 'usual' },
+  { upTo: 1.5, label: 'more' },
+  { upTo: 2.5, label: '' },
+  { upTo: 3.5, label: '' },
+  { upTo: Infinity, label: 'far more' },
 ]
+
+let palette = 'fire'
+export let FIRE_RAMP = PALETTES.fire.ramp
+export let SCORE_STEPS = SCORE_EDGES.map((step, i) => ({ ...step, color: PALETTES.fire.score[i] }))
+
+export function setPalette(name) {
+  palette = PALETTES[name] ? name : 'fire'
+  FIRE_RAMP = PALETTES[palette].ramp
+  SCORE_STEPS = SCORE_EDGES.map((step, i) => ({ ...step, color: PALETTES[palette].score[i] }))
+}
+
+// The colour of a fire regime. Normally the colour saved in the data file;
+// with the colour-blind palette, one picked by the regime's number instead.
+export function regimeColor(id, fromFile) {
+  const list = PALETTES[palette].regimes
+  if (list) return list[(Math.max(1, Number(id) || 1) - 1) % list.length]
+  return fromFile || '#999'
+}
 
 export function scoreColor(z) {
   for (const step of SCORE_STEPS) if (z < step.upTo) return step.color

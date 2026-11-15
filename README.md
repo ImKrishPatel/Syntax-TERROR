@@ -23,34 +23,51 @@ Then open http://localhost:8000 in your browser. Press Ctrl+C in the terminal to
 
 ## What is in the app
 
-- **Map**: pick an area from the menu, draw a box, drag its corners, or type the coordinates.
-- **Verdict**: one plain sentence about the selected area or month, with an anomaly score.
-- **Burning calendar**: years down, months across. Dots mark unusual months, hatching marks
-  years that are estimated from MODIS. Select a square to see that month on the map.
-- **Listen**: plays the calendar as sound.
-- **Fire regimes, forecast, validation**: panels that read the teammates' output files.
-- **Export CSV** of the hotspots in the current search, and **Copy link** to share the exact view.
+- **Home**: search any place (or type coordinates), pick a custom area, and keep favourites.
+  Dark mode, colours for colour-blind viewers and spoken descriptions are switched on here.
+- **Map**: map, satellite, terrain and a NASA burn view. The hotspot grid sits on top. Click the map
+  to pick a place, drag the box to move it, drag a corner to resize it, or Shift + drag to draw one.
+- **Trends**: one plain sentence about the area, a year against a usual year, and the burning
+  calendar (years down, months across). Select a square to see that month on the map.
+- **Anomalies**: the months that were furthest from normal.
+- **Patterns**: the fire regimes in the area.
+- **Forecast**: expected against actual hotspots.
+- **Listen**: plays a year as sound.
+- **About the data**: how MODIS and VIIRS compare, and where everything comes from.
+- **⋮ menu**: copy a link to the exact view, or download the hotspots as CSV.
+- **Chat**: the round button in the corner answers questions about the numbers on screen.
+
+The three lines in the top-left corner hide and show the side menu.
 
 ## Where things are
 
 | path | what it is |
 | --- | --- |
 | `index.html` | the page |
-| `css/style.css` | all the styling |
-| `js/config.js` | settings: file paths, default area, area menu |
+| `css/style.css` | all the styling. Colours are variables at the top; dark mode swaps them |
+| `js/config.js` | settings: file paths, suggested places, map pictures, search, chat |
 | `js/app.js` | the main file: keeps track of what is selected and redraws the page |
 | `js/data.js` | loads `hotspots.csv` and adds up hotspots for an area |
-| `js/stats.js` | usual values, anomaly score, the verdict sentence |
-| `js/map.js` | the map, the area box, the regime layer |
+| `js/stats.js` | usual values, anomaly score, the summary sentence |
+| `js/map.js` | the map, its backgrounds, the hotspot grid, the area box, the regime layer |
+| `js/search.js` | the place search |
+| `js/flames.js` | the flames behind the Home page |
+| `js/prefs.js` | what the browser remembers (dark mode, favourites) |
 | `js/calendar.js` | the burning calendar |
 | `js/charts.js` | the line charts |
-| `js/sound.js` | the "Listen" button |
-| `js/colors.js` | colour ramps |
+| `js/sound.js`, `js/fire-audio.js`, `js/listening-model.js` | the Listen panel |
+| `js/sweep.js` | the Play button on the map |
+| `js/chat.js` | the chat box |
+| `js/colors.js` | colour ramps, and the colour-blind palette |
 | `js/tooltip.js` | the small box that appears when you hover |
+| `server/chat-worker.js` | the small chat server (see "Chat box" below) |
 | `public/data/` | data files. Format: [DATA_FORMAT.md](DATA_FORMAT.md) |
-| `public/basemap/` | coastlines, borders, lakes and towns for the map |
-| `vendor/` | Leaflet and topojson-client, copied in so the app works offline |
+| `public/basemap/` | city list for the place search when there is no internet |
+| `vendor/` | Leaflet and topojson-client, copied in |
 | `analysis/` | Python analysis code (fire regimes) |
+
+The map pictures and the place search come from free services (CARTO, Esri, NASA GIBS, Photon),
+so those two need internet. Everything else works without it.
 
 ## Data
 
@@ -98,3 +115,17 @@ variation. Anomaly shortcuts use the existing two-sigma unusual threshold.
 FRP audio descriptions use megawatts of summed fire radiative power, not energy.
 
 Checks: `node --test tests/listening.test.mjs`.
+
+## Chat box
+
+The round button in the bottom-right corner opens a chat. You can ask about the area and years on
+screen, like "which month was the most unusual?", and it answers from the same numbers the page shows.
+Nobody needs a key to use it.
+
+How it fits together:
+
+- `js/chat.js` is the chat box on the page. `describeView()` in `js/app.js` writes down what is on screen as text.
+- `server/chat-worker.js` is a small free server on Cloudflare Workers. It holds the key as a secret and passes questions on.
+- `chat.url` in `js/config.js` is the address of that server. Leave it empty to switch the chat off.
+
+**Never put the key in this repo.** It only goes into Cloudflare's secret settings.
