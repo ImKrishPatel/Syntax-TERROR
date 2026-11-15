@@ -1,0 +1,5 @@
+lat,lon,acq_date,acq_time,satellite,instrument,confidence,frp,day_night
+40.2,-120.3,2012-01-02,0,NOAA-20,VIIRS,n,8.2,D
+40.3,-120.4,2012-01-03,0123,NOAA-20,VIIRS,high,not-numeric,N
+40.4,-120.5,2012-01-04,2359,SUOMI-NPP,VIIRS,999,3.0,D
+40.5,-181.0,2012-01-05,1200,SUOMI-NPP,VIIRS,nominal,2.0,N
