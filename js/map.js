@@ -259,6 +259,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const MAX_LAT = 85.0511
   const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI / 360))
   const Y_MAX = mercY(MAX_LAT)
+  const GLOW = ['#FFC93C', '#FF9F1C', '#FF6B1A', '#F23B16', '#D81E10']
   const PX = 4                                               // image pixels per cell, so the glow can be soft
   const IMG = Math.round(360 / CONFIG.cellSize) * PX
   const paint = document.createElement('canvas'); paint.width = paint.height = IMG
@@ -271,14 +272,15 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     const ctx = paint.getContext('2d')
     ctx.clearRect(0, 0, IMG, IMG)
     v.forEach((value, i) => {
-      const color = fireColor(value, breaks)
-      if (!color) return
+      if (!fireColor(value, breaks)) return
       // little fire is nearly see-through, a lot of fire is solid: the picture shows where it is quiet
       let k = 0
       while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
       const level = breaks.length > 1 ? k / (breaks.length - 1) : 1
       if (level < 0.4) return                      // the quietest squares stay clear, so the picture shows
-      ctx.globalAlpha = Math.pow((level - 0.4) / 0.6, 1.3) * 0.75 + 0.2
+      const t = (level - 0.4) / 0.6
+      ctx.globalAlpha = Math.pow(t, 1.2) * 0.65 + 0.3
+      const color = GLOW[Math.round(t * (GLOW.length - 1))]   // bright fire colours: amber to hot red
       const c = data.cells[i]
       const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
       const y0 = (Y_MAX - mercY(c.lat + half)) / (2 * Y_MAX) * IMG, y1 = (Y_MAX - mercY(c.lat - half)) / (2 * Y_MAX) * IMG
@@ -365,9 +367,13 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     if (!hotspotLegend) return
     const { breaks, metric, period } = hotspotLegend
     const format = metric === 'frp' ? formatPower : formatNumber
-    const step = breaks.length > 1 ? (FIRE_RAMP.length - 1) / (breaks.length - 1) : 0
-    const swatches = breaks.map((b, i) =>
-      `<span><i style="background:${FIRE_RAMP[Math.round(i * step)]}"></i>${format(b)}${i === breaks.length - 1 ? '+' : ''}</span>`).join('')
+    // same rule as paintCells: the quietest classes are left clear, the rest glow amber to red
+    const swatches = breaks.map((b, i) => {
+      const level = breaks.length > 1 ? i / (breaks.length - 1) : 1
+      const t = (level - 0.4) / 0.6
+      const fill = level < 0.4 ? 'transparent; border: 1px dashed rgba(255,255,255,0.4)' : GLOW[Math.round(t * (GLOW.length - 1))]
+      return `<span><i style="background:${fill}"></i>${format(b)}${i === breaks.length - 1 ? '+' : ''}</span>`
+    }).join('')
     legendElement.innerHTML =
       `<p class="legend-title">Key: ${metric === 'frp' ? 'fire energy' : 'hotspots'} per square, ${period}</p>` +
       `<div class="legend-ramp">${swatches}</div>`
