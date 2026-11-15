@@ -334,7 +334,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   let area = null
   const WORLD_RING = [[-89, -400], [-89, 400], [89, 400], [89, -400]]
   const shade = L.polygon([WORLD_RING], {
-    renderer: areaCanvas, interactive: false, stroke: false, fillColor: '#000', fillOpacity: 0.4,
+    renderer: areaCanvas, interactive: false, stroke: false, fillColor: '#000', fillOpacity: 0.25,
   }).addTo(map)
   const box = L.rectangle([[0, 0], [1, 1]], {
     renderer: areaCanvas, interactive: false, fill: false, color: MAGENTA, weight: 2,
