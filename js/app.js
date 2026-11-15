@@ -419,8 +419,22 @@ function showApp() {
   document.body.classList.remove('is-start')
   window.scrollTo(0, 0)
   // wait for the layout to settle before sizing the map and zooming to the area
-  requestAnimationFrame(() => setTimeout(() => { mapView.refresh(); mapView.fitArea() }, 60))
+  requestAnimationFrame(() => setTimeout(() => { mapView.refresh(); mapView.fitArea(); showTip(false) }, 60))
 }
+// a short tip on the map that fades away (shown once, or again from the menu)
+let tipTimer = null
+function showTip(force) {
+  let seen = false
+  try { seen = localStorage.getItem('emberTipSeen') === '1' } catch (err) { /* storage may be blocked */ }
+  if (seen && !force) return
+  const tip = $('mapHint')
+  tip.hidden = false
+  requestAnimationFrame(() => tip.classList.add('is-shown'))
+  clearTimeout(tipTimer)
+  tipTimer = setTimeout(() => { tip.classList.remove('is-shown'); setTimeout(() => { tip.hidden = true }, 400) }, 6500)
+  try { localStorage.setItem('emberTipSeen', '1') } catch (err) { /* fine */ }
+}
+
 function showStart() {
   document.body.classList.add('is-start')
   window.scrollTo(0, 0)
@@ -473,12 +487,15 @@ function wireControls() {
   wireSearch($('heroSearch'), $('heroResults'), goTo)
   wireSearch($('placeSearch'), $('placeResults'), goTo)
 
-  // map key behind an info button
-  $('legendToggle').onclick = () => {
-    const legend = $('mapLegend')
-    legend.hidden = !legend.hidden
-    $('legendToggle').setAttribute('aria-expanded', String(!legend.hidden))
+  // Layers popover on the map (what to show, map style, key)
+  const layersPanel = $('layersPanel'), layersButton = $('layersButton')
+  layersButton.onclick = () => {
+    layersPanel.hidden = !layersPanel.hidden
+    layersButton.setAttribute('aria-expanded', String(!layersPanel.hidden))
   }
+  document.addEventListener('click', e => {
+    if (!layersPanel.hidden && !e.target.closest('.map-tools')) { layersPanel.hidden = true; layersButton.setAttribute('aria-expanded', 'false') }
+  })
 
   // time slider on the map: 0 = the selected years, then one step per year
   const slider = $('mapYear')
@@ -566,6 +583,7 @@ function wireControls() {
   $('coordsButton').onclick = () => { openPanel($('areaForm'), $('coordsButton')); $('north').focus() }
   $('aboutButton').onclick = () => { closeMenu(); showApp(); document.querySelector('.foot').scrollIntoView({ behavior: 'smooth' }) }
   $('homeButton').onclick = () => { closeMenu(); showStart() }
+  $('tipButton').onclick = () => { closeMenu(); showApp(); showTip(true) }
   $('downloadButton').onclick = () => {
     const csv = currentCsv()
     const link = document.createElement('a')

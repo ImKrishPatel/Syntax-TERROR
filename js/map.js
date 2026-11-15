@@ -290,7 +290,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
 
   function drawLegend() {
     if (showing === 'regimes' && regimeLayer) {
-      legendElement.innerHTML = '<p class="legend-title">Fire regime of each cell</p>' +
+      legendElement.innerHTML = '<p class="legend-title">Key: fire regime of each square</p>' +
         regimeList.map(r => `<p class="legend-row"><i style="background:${r.color}"></i>${r.name}</p>`).join('') +
         '<p class="legend-row"><i class="shifted"></i>White outline: regime changed over time</p>'
       return
@@ -302,7 +302,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     const swatches = breaks.map((b, i) =>
       `<span><i style="background:${FIRE_RAMP[Math.round(i * step)]}"></i>${format(b)}${i === breaks.length - 1 ? '+' : ''}</span>`).join('')
     legendElement.innerHTML =
-      `<p class="legend-title">${metric === 'frp' ? 'Fire energy' : 'Hotspots'} per cell, ${period}</p>` +
+      `<p class="legend-title">Key: ${metric === 'frp' ? 'fire energy' : 'hotspots'} per square, ${period}</p>` +
       `<div class="legend-ramp">${swatches}</div>`
   }
 

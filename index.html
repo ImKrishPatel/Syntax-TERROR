@@ -25,7 +25,6 @@
         <path d="M16.2 14.6c.3 1.6 2.4 2.6 2.4 5a2.6 2.6 0 0 1-5.2.1c0-1.3.7-2.1 1.3-2.7.1.7.4 1.2.9 1.5-.2-1.5.1-2.8.6-3.9z" fill="#F8DC78"/>
       </svg>
       <span class="brand-name">Ember Atlas</span>
-      <span class="brand-team">21 years of the world's fires, in plain English · Syntax TERROR, NASA Space Apps 2026</span>
     </div>
     <div class="search search-compact" role="search">
       <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -40,12 +39,15 @@
           <span class="visually-hidden">More</span>
         </button>
         <div class="menu" id="appMenu" role="menu" hidden>
-          <button type="button" role="menuitem" id="shareButton">Copy link to this view</button>
-          <button type="button" role="menuitem" id="exportButton" aria-expanded="false" aria-controls="exportPanel">Export this area as CSV</button>
-          <button type="button" role="menuitem" id="coordsButton" aria-expanded="false" aria-controls="coordsPanel">Enter coordinates</button>
-          <button type="button" role="menuitem" id="aboutButton">About the data</button>
-          <hr>
-          <button type="button" role="menuitem" id="homeButton">Back to search</button>
+          <p class="menu-label">Share</p>
+          <button type="button" role="menuitem" id="shareButton"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.2-1.2a2.6 2.6 0 0 1 3.7 3.7L10.7 8.2M9 11.5l-1.2 1.2a2.6 2.6 0 0 1-3.7-3.7L5.3 7.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>Copy link to this view</span></button>
+          <button type="button" role="menuitem" id="exportButton" aria-expanded="false" aria-controls="exportPanel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.8 7 8 10.2 11.2 7M3 13h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download data (CSV)</span></button>
+          <p class="menu-label">Area</p>
+          <button type="button" role="menuitem" id="coordsButton" aria-expanded="false" aria-controls="coordsPanel"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>Enter coordinates</span></button>
+          <button type="button" role="menuitem" id="homeButton"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>New search</span></button>
+          <p class="menu-label">Help</p>
+          <button type="button" role="menuitem" id="tipButton"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 13.5h5M6 11.5c0-1.6-2.2-2.4-2.2-5a4.2 4.2 0 0 1 8.4 0c0 2.6-2.2 3.4-2.2 5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span>How to use the map</span></button>
+          <button type="button" role="menuitem" id="aboutButton"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/></svg><span>About the data</span></button>
         </div>
         <div class="export-panel" id="exportPanel" hidden>
           <p id="exportText"></p>
@@ -98,20 +100,26 @@
 
       <div class="map-wrap">
         <div id="map"></div>
-        <div class="layer-switch segmented" role="group" aria-label="What the map shows">
-          <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
-          <button type="button" data-layer="regimes" aria-pressed="false">Fire regimes</button>
+        <div class="map-tools">
+          <button type="button" class="tool-button" id="layersButton" aria-expanded="false" aria-controls="layersPanel">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 1.5 5.2 8 8.6l6.5-3.4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m1.5 8.2 6.5 3.4 6.5-3.4M1.5 11.2 8 14.6l6.5-3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <span>Layers</span>
+          </button>
+          <div class="layers-panel" id="layersPanel" hidden>
+            <p class="tool-title">Show on the map</p>
+            <div class="segmented" role="group" aria-label="What the map shows">
+              <button type="button" data-layer="hotspots" aria-pressed="true">Hotspots</button>
+              <button type="button" data-layer="regimes" aria-pressed="false">Fire regimes</button>
+            </div>
+            <p class="tool-title">Map style</p>
+            <div class="segmented" role="group" aria-label="Map style">
+              <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
+              <button type="button" data-basemap="map" aria-pressed="false">Dark map</button>
+            </div>
+            <div class="legend" id="mapLegend"></div>
+          </div>
         </div>
-        <div class="basemap-switch segmented" role="group" aria-label="Map style">
-          <button type="button" data-basemap="satellite" aria-pressed="true">Satellite</button>
-          <button type="button" data-basemap="map" aria-pressed="false">Map</button>
-        </div>
-        <p class="map-hint" id="mapHint">Drag the box to move it · click to jump · Shift + drag for a new box · corners resize</p>
-        <button type="button" class="legend-toggle" id="legendToggle" aria-expanded="false" aria-controls="mapLegend" title="What the colours mean">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="4.6" r="1" fill="currentColor"/></svg>
-          <span>Key</span>
-        </button>
-        <div class="legend" id="mapLegend" hidden></div>
+        <p class="map-toast" id="mapHint" hidden>Drag the pink box to move it. Click anywhere to jump there. Shift + drag draws a new box.</p>
         <div class="timebar" id="timebar">
           <button type="button" class="play" id="mapPlay" aria-pressed="false" title="Play the years on the map, with sound">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-play" d="M4 2.5v11l9-5.5z"/><path class="i-stop" d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>
@@ -204,6 +212,7 @@
       <footer class="foot">
         <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record puts both on the VIIRS scale so that 2005 can be compared with 2025.</p>
         <p><b>What is the score?</b> How far a month is from the average of that same calendar month, counted in standard deviations (σ). Around 0 is normal. 2 or more is unusual.</p>
+        <p class="foot-sources">Ember Atlas by Syntax TERROR (Aashana, Pearl, Mridul, Snavya, Krish, Shriya) for NASA Space Apps 2026.</p>
         <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite imagery and dark map: Esri. Place names for search: Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>
       </footer>
     </div>

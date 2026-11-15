@@ -26,7 +26,7 @@ export function stopCalendar() {
 function note(frequency, loudness, length) {
   const osc = audio.createOscillator()
   const gain = audio.createGain()
-  osc.type = 'triangle'
+  osc.type = 'sine'
   osc.frequency.value = frequency
   gain.gain.setValueAtTime(0, audio.currentTime)
   gain.gain.linearRampToValueAtTime(loudness, audio.currentTime + 0.012)
@@ -36,19 +36,28 @@ function note(frequency, loudness, length) {
   osc.stop(audio.currentTime + length + 0.02)
 }
 
+// A soft "ember pop" for unusual months: a few short, muffled pops through a
+// low-pass filter, kept quiet (the old version was raw white-noise clicks and sounded harsh).
 function crackle(loudness) {
-  const length = 0.16
-  const buffer = audio.createBuffer(1, audio.sampleRate * length, audio.sampleRate)
+  const length = 0.28
+  const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * length), audio.sampleRate)
   const samples = buffer.getChannelData(0)
-  for (let i = 0; i < samples.length; i++) {
-    // random pops that fade out
-    samples[i] = Math.random() < 0.04 ? (Math.random() * 2 - 1) * (1 - i / samples.length) : 0
+  const pops = 3 + Math.floor(Math.random() * 3)
+  for (let p = 0; p < pops; p++) {
+    const start = Math.floor(Math.random() * samples.length * 0.8)
+    const size = Math.floor(audio.sampleRate * 0.012)
+    for (let i = 0; i < size && start + i < samples.length; i++) {
+      samples[start + i] += (Math.random() * 2 - 1) * Math.exp(-i / (size / 4))   // each pop dies away fast
+    }
   }
   const source = audio.createBufferSource()
+  const filter = audio.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 1400
   const gain = audio.createGain()
-  gain.gain.value = loudness
+  gain.gain.value = Math.min(0.09, loudness * 0.12)
   source.buffer = buffer
-  source.connect(gain).connect(audio.destination)
+  source.connect(filter).connect(gain).connect(audio.destination)
   source.start()
 }
 
