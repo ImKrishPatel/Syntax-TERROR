@@ -99,3 +99,54 @@ __marimo__/
 /results/**
 !/results/**/
 !/results/**/.gitkeep
+# Node / Vite
+node_modules/
+.vite/
+
+# Local tool config
+.claude/
+# macOS files
+.DS_Store
+
+# NASA raw archives and downloaded data
+shriya_backend/data/raw_nasa/
+
+# Large real NASA datasets
+shriya_backend/data/*_real_cleaned.csv.gz
+
+# Generated real FRP outputs
+shriya_backend/data/*_anomalies_real.csv
+shriya_backend/data/*_daily_frp_real.csv
+shriya_backend/data/*_regional_frp_real.csv
+shriya_backend/data/*_regional_clusters_real.csv
+shriya_backend/data/real_frp_matches_*.csv
+shriya_backend/data/real_frp_calibration_pilot.csv
+shriya_backend/data/selected_calibration_dates.csv
+shriya_backend/data/frp_matching_temp/
+.env
+
+# ==========================================
+# API KEYS AND SECRET CREDENTIALS
+# ==========================================
+
+.env
+.env.*
+!.env.example
+
+# API credentials and private keys
+secrets/
+credentials/
+*.secret
+*.pem
+*.key
+service-account*.json
+google-credentials*.json
+
+# Python environment and cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local development settings
+.vscode/

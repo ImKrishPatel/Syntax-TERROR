@@ -1,0 +1,32 @@
+{
+    "calibration_direction": "VIIRS_FRP_to_MODIS_FRP",
+    "target": "MODIS FRP (MW)",
+    "predictor": "VIIRS FRP (MW)",
+    "split_method": "chronological_date_split",
+    "training_end_date": "2025-08-14",
+    "testing_start_date": "2025-08-15",
+    "testing_end_date": "2026-07-31",
+    "training_dates": 1337,
+    "testing_dates": 335,
+    "positive_training_pairs": 4958621,
+    "positive_testing_pairs": 279117,
+    "ordinary_linear": {
+        "intercept": 23.7925246440714,
+        "slope": 1.8719126746211914,
+        "test_metrics": {
+            "r2": 0.1211510434621611,
+            "mae": 47.31105834115458,
+            "rmse": 147.20785815492567
+        }
+    },
+    "log_linear": {
+        "intercept": 2.115186643584373,
+        "slope": 0.5224182271789316,
+        "test_metrics": {
+            "r2": 0.03449253421099274,
+            "mae": 41.958696542411474,
+            "rmse": 154.29494262710136
+        }
+    },
+    "status": "preliminary_temporal_holdout_evaluation"
+}

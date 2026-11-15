@@ -8,3 +8,7 @@ shapely
 pyproj
 rasterio
 matplotlib
+fastapi
+uvicorn[standard]
+google-genai
+python-dotenv
