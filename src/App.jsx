@@ -1,10 +1,11 @@
+
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import ExplorePage from './pages/ExplorePage.jsx'
 import AboutPage from './pages/AboutPage.jsx'
 import ShareButton from './components/ShareButton.jsx'
+import Chatbot from './components/Chatbot.jsx'
 
 export default function App() {
-  // keep the selection (?bbox=...&from=...) when switching pages
   const { search } = useLocation()
 
   return (
@@ -26,6 +27,8 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
         </Routes>
       </main>
+
+      <Chatbot />
     </div>
   )
 }
