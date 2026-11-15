@@ -16,7 +16,7 @@ import { SCORE_STEPS, setPalette, regimeColor } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { createListeningPanel } from './sound.js?v=main-voice-5'
+import { createListeningPanel } from './sound.js?v=main-voice-7'
 import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
 import { wireSearch } from './search.js'
 import { startFlames } from './flames.js'
@@ -699,11 +699,15 @@ function startPlaying() {
   }, stopPlaying)
 }
 
+// Shared by navigation and microphone actions.
+function closeMenuOnPhone() {
+  if (window.innerWidth < 760 && !settings.sideClosed) toggleSetting('sideClosed')
+}
+
 // Things that work before the data file has loaded: moving around, search, settings.
 function wireShell() {
   // side menu, Home buttons, and the logo
   // on a phone the menu covers the page, so it closes again once you have picked something
-  const closeMenuOnPhone = () => { if (window.innerWidth < 760 && !settings.sideClosed) toggleSetting('sideClosed') }
   document.querySelectorAll('button[data-page]').forEach(b => {
     b.onclick = () => { closeMenuOnPhone(); show(b.dataset.page) }
   })
@@ -845,7 +849,7 @@ function wireData() {
   // The Listen panel shares month selection with the calendar and the map.
   listening = createListeningPanel({
     onOpen: () => openFeature('listen'),
-    onVoiceStart: () => { if (isPlaying()) stopPlaying(); closeMenuOnPhone(); openFeature('listen') },
+    onVoiceStart: () => { if (isPlaying()) stopPlaying() },
     onSpeechChange: enabled => { settings.speech = enabled; savePref('speech', enabled); applySettings() },
     onMetric: metric => update({ metric }),
     onPick: (year, month) => { if (isPlaying()) stopPlaying(); update({ month: monthKey(year, month) }, true) },

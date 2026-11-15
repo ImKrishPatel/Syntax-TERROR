@@ -2,7 +2,7 @@
 import { createPlayer, soundFor } from './fire-audio.js'
 import { listeningMonths, describeMonth, seasonSummary, strongestMonth } from './listening-model.js'
 import { MONTHS } from './config.js'
-import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=main-voice-5'
+import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=main-voice-7'
 
 export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, onSpeechChange, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
   const $ = id => document.getElementById(id)

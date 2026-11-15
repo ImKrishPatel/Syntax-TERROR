@@ -149,7 +149,7 @@ quality require a manual browser check with the user's microphone.
 
 ### Latest website integration
 
-Integrated latest `main` revision `140c387` with Mridul’s microphone and Listen updates. Speak lives immediately after Listen in the navigation and opens the Listen window. Shortcut: Option+Shift+M on Mac or Alt+Shift+M on Windows. Keyword Guide opens inside that window. Starting a voice command stops the separate map playback so its sounds do not overlap.
+Integrated latest `main` revision `140c387` with Mridul’s microphone and Listen updates. Speak lives immediately after Listen in the navigation and keeps the current page and panel open. Listen opens only when selected, or when explicitly requested through the Keyword Guide command. Shortcut: Option+Shift+M on Mac or Alt+Shift+M on Windows. Keyword Guide opens inside that window. Starting a voice command stops the separate map playback so its sounds do not overlap.
 ## Chat box
 
 The round button in the bottom-right corner opens a chat. You can ask about the area and years on

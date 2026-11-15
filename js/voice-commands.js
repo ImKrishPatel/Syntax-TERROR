@@ -31,7 +31,13 @@ export function attachMicrophone({button,status,onStart,onCommand,onMessage,Reco
     return {cancel,supported:false}
   }
   button.onclick=()=>{
-    cancel();onStart()
+    cancel()
+    try { onStart() } catch(error) {
+      console.error('Microphone setup failed:',error)
+      status.textContent='Could not start Speak. Refresh the page and try again.'
+      Promise.resolve().then(()=>onMessage(status.textContent)).catch(error=>console.error('Voice error message failed:',error))
+      return
+    }
     const rec=new Recognition();active=rec
     let transcript=null, problem=null, finished=false
     rec.lang='en-US';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1
