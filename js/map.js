@@ -308,7 +308,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     const breaks = fireBreaks(v)
     paintCells(v, breaks)
     cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
-    if (showing === 'hotspots') addHeat()
+    if (showing === 'hotspots' && !plain) addHeat()
     hotspotLegend = { breaks, metric, period }
     drawLegend()
   }
@@ -345,8 +345,23 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     }
   }
 
+  // Plain globe: before a place is chosen the map shows only the satellite picture
+  let plain = false
+  function setPlain(next) {
+    if (next === plain) return
+    plain = next
+    element.classList.toggle('is-plain', plain)
+    for (const layer of [shade, box, ...handles]) plain ? map.removeLayer(layer) : layer.addTo(map)
+    if (plain) {
+      removeHeat(); map.removeLayer(cellGroup)
+      if (regimeLayer) map.removeLayer(regimeLayer)
+      legendElement.innerHTML = ''
+    } else showLayer(showing)
+  }
+
   function showLayer(name) {
     showing = name
+    if (plain) return
     if (name === 'regimes' && regimeLayer) {
       map.removeLayer(cellGroup); removeHeat(); regimeLayer.addTo(map)
     } else {
@@ -467,7 +482,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     return cancel
   }
 
-  const inside = ll => area && ll.lat >= area[0] && ll.lat <= area[2] && ll.lng >= area[1] && ll.lng <= area[3]
+  const inside = ll => !plain && area && ll.lat >= area[0] && ll.lat <= area[2] && ll.lng >= area[1] && ll.lng <= area[3]
   let swallowClick = false
 
   // Drag the box from its middle to move it
@@ -529,7 +544,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   return {
     map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setImageryDate,
     getPlaces: () => places,
-    refresh: () => { map.invalidateSize(); if (showing === 'hotspots') addHeat() },
+    refresh: () => { map.invalidateSize(); if (showing === 'hotspots' && !plain) addHeat() },
+    setPlain, showWorld: () => map.setView([25, 0], 2.25),
     openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),
     isShowing: () => showing,
     setArea, fitArea, startDrawing,

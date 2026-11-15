@@ -26,7 +26,10 @@ const state = {
   mode: 'amount',                  // calendar colours: 'amount' or 'score'
   layer: 'hotspots',               // map layer: 'hotspots' or 'regimes'
   mapYear: null,                   // one year shown on the map (time slider), or null for the selected years
+  hasArea: false,                  // false until a place is searched or picked: the map is a plain globe
 }
+let page = 'home'                  // 'home' or 'map'
+let feature = null                 // open feature window: 'trends', 'anomalies', 'patterns', 'listen', 'about'
 
 let listening = null
 let mapView = null
@@ -40,7 +43,8 @@ let playingAt = null    // { year, month } while the map is playing through the 
 function readAddress() {
   const params = new URLSearchParams(location.hash.slice(1))
   const area = (params.get('area') || '').split(',').map(Number)
-  if (area.length === 4 && area.every(v => Number.isFinite(v)) && area[0] < area[2] && area[1] < area[3]) state.area = area
+  state.hasArea = area.length === 4 && area.every(v => Number.isFinite(v)) && area[0] < area[2] && area[1] < area[3]
+  if (state.hasArea) state.area = area
   const years = (params.get('years') || '').split('-').map(Number)
   if (years.length === 2 && years[0] >= data.firstYear && years[1] <= data.lastYear && years[0] <= years[1]) {
     state.fromYear = years[0]; state.toYear = years[1]
@@ -54,6 +58,10 @@ function readAddress() {
 
 function writeAddress() {
   const params = new URLSearchParams()
+  if (!state.hasArea) {
+    try { history.replaceState(null, '', page === 'map' ? '#page=map' : location.pathname + location.search) } catch (err) { /* fine */ }
+    return
+  }
   params.set('area', state.area.join(','))
   params.set('years', `${state.fromYear}-${state.toYear}`)
   if (state.month) params.set('month', state.month)
@@ -67,6 +75,7 @@ function writeAddress() {
 
 function update(changes, fromAudio = false) {
   if (!fromAudio) listening?.stop()
+  if (changes.area) state.hasArea = true   // any chosen area (search, example, map click, typed edges) ends the plain globe
   Object.assign(state, changes)
   // a selected month must be inside the selected years
   if (state.month) {
@@ -121,7 +130,10 @@ function render() {
   setPressed('[data-mode]', 'mode', state.mode)
   setPressed('[data-layer]', 'layer', state.layer)
 
-  // --- map ---
+  // --- map: a plain globe until a place is chosen ---
+  mapView.setPlain(!state.hasArea)
+  document.body.classList.toggle('is-plain', !state.hasArea)
+  renderFeatureWindow()
   mapView.setArea(state.area)
   const first = picked ? monthIndex(state.month) : Math.max(0, monthIndex(`${state.fromYear}-01`))
   const lastKey = `${state.toYear}-12`
@@ -137,12 +149,8 @@ function render() {
   drawCalendar($('calendar'), $('calendarLegend'), table, state.mode, picked, (year, month) => {
     const key = monthKey(year, month)
     update({ month: state.month === key ? null : key })   // selecting the same square again clears it
-    // bring the sentence about this month back into view if it has scrolled away
-    if ($('verdict').getBoundingClientRect().top < 60) {
-      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      $('verdict').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' })
-    }
   })
+  renderAnomalies()
 
   listening?.update(table, picked, JSON.stringify([state.area,state.fromYear,state.toYear,state.metric]), cellsInside > 0, state.mode)
 
@@ -436,12 +444,98 @@ function wireSearch(input, results, onPick) {
 }
 
 // the search screen and the app
-function showApp() {
-  document.body.classList.remove('is-start')
-  window.scrollTo(0, 0)
-  // wait for the layout to settle before sizing the map and zooming to the area
-  requestAnimationFrame(() => setTimeout(() => { mapView.refresh(); mapView.fitArea(); showTip(false) }, 60))
+// ---------------------------------------------------------------------------
+// Pages (sidebar): Home and Fire Map; features open as a window over the map
+// ---------------------------------------------------------------------------
+const FEATURES = {
+  trends: 'Trends',
+  anomalies: 'Anomalies',
+  patterns: 'Patterns',
+  listen: 'Listen to the data',
+  about: 'About the data',
 }
+
+function markSidebar() {
+  document.querySelectorAll('.side-item').forEach(b => {
+    const on = feature ? b.dataset.feature === feature : b.dataset.page === page
+    b.setAttribute('aria-current', on ? 'true' : 'false')
+  })
+}
+
+function setPage(next) {
+  const was = page
+  page = next
+  document.body.classList.toggle('page-home', page === 'home')
+  document.body.classList.toggle('page-map', page === 'map')
+  if (page === 'home') closeFeature()
+  markSidebar()
+  writeAddress()
+  window.scrollTo(0, 0)
+  if (page === 'map' && was !== 'map') {
+    // wait for the layout to settle before sizing the map and zooming
+    requestAnimationFrame(() => setTimeout(() => {
+      mapView.refresh()
+      if (state.hasArea) { mapView.fitArea(); showTip(false) } else mapView.showWorld()
+    }, 60))
+  }
+  if (page === 'home') $('heroSearch').focus()
+}
+
+function openFeature(name) {
+  feature = name
+  // Patterns are the fire regimes, so the map switches to that layer (and back for the others)
+  if (name === 'patterns' && regimes && state.layer !== 'regimes') update({ layer: 'regimes' })
+  else if ((name === 'trends' || name === 'anomalies') && state.layer !== 'hotspots') update({ layer: 'hotspots' })
+  if (page !== 'map') setPage('map')
+  renderFeatureWindow()
+  markSidebar()
+  $('featureBody').scrollTop = 0
+}
+
+function closeFeature() {
+  if (feature === 'listen') listening?.stop()
+  feature = null
+  renderFeatureWindow()
+  markSidebar()
+}
+
+function renderFeatureWindow() {
+  const win = $('featureWindow')
+  win.hidden = !feature
+  if (!feature) return
+  $('featureTitle').textContent = FEATURES[feature]
+  const needsArea = feature !== 'about'
+  const empty = needsArea && !state.hasArea
+  $('featureEmpty').hidden = !empty
+  $('featureWhere').textContent = empty || !needsArea ? '' : `${areaName() === 'Custom area' ? areaText() : areaName()} · ${state.fromYear} to ${state.toYear}`
+  document.querySelectorAll('.fw-group').forEach(g => g.classList.toggle('is-open', !empty && g.dataset.group === feature))
+}
+
+// the most unusual months of the selected area, for the Anomalies window
+function renderAnomalies() {
+  const items = []
+  table.years.forEach((year, row) => {
+    for (let m = 0; m < 12; m++) {
+      const z = table.score[row][m], v = table.value[row][m]
+      if (Number.isFinite(z) && z >= 2 && v > 0) items.push({ year, m, z, v, usual: table.usual[m].median })
+    }
+  })
+  items.sort((a, b) => b.z - a.z)
+  const unit = state.metric === 'frp' ? 'fire energy' : 'hotspots'
+  const fmt = v => state.metric === 'frp' ? formatPower(v) : formatNumber(v)
+  $('anomalyList').innerHTML = items.length
+    ? items.slice(0, 8).map(a => `<li><button type="button" data-month="${monthKey(a.year, a.m)}" aria-pressed="${state.month === monthKey(a.year, a.m)}">
+        <span class="an-when">${MONTHS[a.m]} ${a.year}</span>
+        <span class="an-score">+${a.z.toFixed(1)}σ</span>
+        <span class="an-detail">${fmt(a.v)} ${unit}; a usual ${MONTHS[a.m]} has ${fmt(a.usual)}</span>
+      </button></li>`).join('')
+    : `<li class="an-none">No month here was 2σ or more above usual between ${state.fromYear} and ${state.toYear}.</li>`
+  $('anomalyList').querySelectorAll('button').forEach(b => {
+    b.onclick = () => update({ month: state.month === b.dataset.month ? null : b.dataset.month })
+  })
+}
+
+function showApp() { setPage('map') }
 // a short tip on the map that fades away (shown once, or again from the menu)
 let tipTimer = null
 function showTip(force) {
@@ -456,11 +550,7 @@ function showTip(force) {
   try { localStorage.setItem('emberTipSeen', '1') } catch (err) { /* fine */ }
 }
 
-function showStart() {
-  document.body.classList.add('is-start')
-  window.scrollTo(0, 0)
-  $('heroSearch').focus()
-}
+function showStart() { setPage('home') }
 
 function stopListening() {
   stopCalendar()
@@ -568,6 +658,9 @@ function wireControls() {
     onMode: mode => update({mode}),
     onHighlight: (row, month) => markPlaying($('calendar'),row,month),
   })
+  // the calendar's Listen button now opens the Listen window
+  $('listenButton').onclick = () => openFeature('listen')
+  $('listenButton').removeAttribute('aria-controls'); $('listenButton').removeAttribute('aria-expanded')
 
   // the ⋮ menu
   const menu = $('appMenu'), menuButton = $('menuButton')
@@ -593,7 +686,13 @@ function wireControls() {
   }
   $('exportButton').onclick = () => openPanel($('exportPanel'), $('exportButton'))
   $('coordsButton').onclick = () => { openPanel($('areaForm'), $('coordsButton')); $('north').focus() }
-  $('aboutButton').onclick = () => { closeMenu(); showApp(); document.querySelector('.foot').scrollIntoView({ behavior: 'smooth' }) }
+  $('aboutButton').onclick = () => { closeMenu(); openFeature('about') }
+
+  // sidebar and home cards
+  document.querySelectorAll('[data-page]').forEach(b => { b.onclick = () => { if (b.dataset.page === 'map') closeFeature(); setPage(b.dataset.page) } })
+  document.querySelectorAll('[data-feature]').forEach(b => { b.onclick = () => (feature === b.dataset.feature ? closeFeature() : openFeature(b.dataset.feature)) })
+  $('featureClose').onclick = closeFeature
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && feature && !event.target.closest('input, select')) closeFeature() })
   $('homeButton').onclick = () => { closeMenu(); showStart() }
   $('tipButton').onclick = () => { closeMenu(); showApp(); showTip(true) }
   $('downloadButton').onclick = () => {
@@ -617,7 +716,10 @@ function wireControls() {
 // ---------------------------------------------------------------------------
 async function start() {
   // a shared link (with an area in it) opens straight on the map; otherwise start on the search screen
-  if (!new URLSearchParams(location.hash.slice(1)).get('area')) document.body.classList.add('is-start')
+  const firstParams = new URLSearchParams(location.hash.slice(1))
+  page = firstParams.get('area') || firstParams.get('page') === 'map' ? 'map' : 'home'
+  document.body.classList.toggle('page-home', page === 'home')
+  document.body.classList.toggle('page-map', page === 'map')
 
   mapView = createMap($('map'), $('mapLegend'), {
     onAreaChange: area => update({ area }),
@@ -653,8 +755,10 @@ async function start() {
     document.querySelector('[data-layer="regimes"]').disabled = true
   }
 
-  mapView.setArea(state.area, { fit: true })
+  mapView.setArea(state.area, { fit: state.hasArea })
+  if (!state.hasArea) mapView.showWorld()
   render()
+  markSidebar()
   renderForecast(forecast)
   renderValidation(validation)
 
