@@ -1,0 +1,486 @@
+{
+ "is_demo": false,
+ "region": "Northern Alberta (57-61°N, 112-119°W), 2023, a year the model never saw",
+ "made_on": "2023-08-24",
+ "unit": "MODIS hotspots per day (7-day average)",
+ "model": "XGBoost, 5/50/95% quantiles of the next 7-day and 30-day hotspot totals",
+ "note": "Before made_on: each point is the 7-day forecast made a week earlier. After made_on: the forecast made on made_on (days 1-7 from the 7-day forecast, days 8-30 from the 30-day one). Actual = 7-day average. Inputs: recent fire, NASA POWER weather and soil moisture, season. The model for 2023 was trained on every other year.",
+ "weather_point": {
+  "lat": 58.9392,
+  "lon": -115.2332,
+  "source": "NASA POWER (MERRA-2)"
+ },
+ "test_metrics": {
+  "years": "2006-2025",
+  "months": "April-October",
+  "next_7_days": {
+   "mae_model": 195.1,
+   "mae_repeat_recent": 234.5,
+   "mae_usual_for_date": 343.4,
+   "better_than_repeat_recent_pct": 17,
+   "better_than_usual_pct": 43,
+   "log_r2_model": 0.55,
+   "log_r2_repeat_recent": 0.42,
+   "log_r2_usual_for_date": -0.73,
+   "share_inside_range": 0.82
+  },
+  "next_30_days": {
+   "mae_model": 861.0,
+   "mae_repeat_recent": 960.9,
+   "mae_usual_for_date": 1356.1,
+   "better_than_repeat_recent_pct": 10,
+   "better_than_usual_pct": 37,
+   "log_r2_model": 0.44,
+   "log_r2_repeat_recent": -0.09,
+   "log_r2_usual_for_date": -0.54,
+   "share_inside_range": 0.75
+  }
+ },
+ "live": {
+  "made_on": "2026-11-14",
+  "next_7_days": {
+   "expected": 10,
+   "low": 0,
+   "high": 84
+  },
+  "next_30_days": {
+   "expected": 95,
+   "low": 2,
+   "high": 217
+  }
+ },
+ "top_features": {
+  "log_base": 10.27,
+  "fires_last_7d": 9.73,
+  "usual_vs_now": 5.59,
+  "fires_today": 4.03,
+  "soil_root": 2.43,
+  "days_since_fire": 2.4,
+  "soil_top": 2.3,
+  "humidity": 2.22,
+  "fires_last_3d": 2.13,
+  "hot_dry_windy": 2.09
+ },
+ "days": [
+  {
+   "date": "2023-07-26",
+   "expected": 104.0,
+   "low": 18.6,
+   "high": 941.6,
+   "actual": 354.7
+  },
+  {
+   "date": "2023-07-27",
+   "expected": 99.2,
+   "low": 46.0,
+   "high": 731.1,
+   "actual": 395.9
+  },
+  {
+   "date": "2023-07-28",
+   "expected": 128.2,
+   "low": 64.5,
+   "high": 719.9,
+   "actual": 363.0
+  },
+  {
+   "date": "2023-07-29",
+   "expected": 98.6,
+   "low": 20.9,
+   "high": 614.0,
+   "actual": 348.6
+  },
+  {
+   "date": "2023-07-30",
+   "expected": 113.7,
+   "low": 15.4,
+   "high": 419.2,
+   "actual": 354.1
+  },
+  {
+   "date": "2023-07-31",
+   "expected": 83.9,
+   "low": 27.5,
+   "high": 395.4,
+   "actual": 344.0
+  },
+  {
+   "date": "2023-08-01",
+   "expected": 22.3,
+   "low": 5.3,
+   "high": 256.5,
+   "actual": 300.7
+  },
+  {
+   "date": "2023-08-02",
+   "expected": 27.4,
+   "low": 6.0,
+   "high": 279.0,
+   "actual": 267.0
+  },
+  {
+   "date": "2023-08-03",
+   "expected": 48.3,
+   "low": 11.2,
+   "high": 335.0,
+   "actual": 221.4
+  },
+  {
+   "date": "2023-08-04",
+   "expected": 66.3,
+   "low": 16.0,
+   "high": 407.0,
+   "actual": 205.9
+  },
+  {
+   "date": "2023-08-05",
+   "expected": 69.8,
+   "low": 12.3,
+   "high": 401.4,
+   "actual": 173.9
+  },
+  {
+   "date": "2023-08-06",
+   "expected": 86.8,
+   "low": 28.8,
+   "high": 475.8,
+   "actual": 114.1
+  },
+  {
+   "date": "2023-08-07",
+   "expected": 50.1,
+   "low": 9.6,
+   "high": 315.4,
+   "actual": 117.0
+  },
+  {
+   "date": "2023-08-08",
+   "expected": 40.9,
+   "low": 3.0,
+   "high": 439.1,
+   "actual": 167.9
+  },
+  {
+   "date": "2023-08-09",
+   "expected": 106.5,
+   "low": 8.2,
+   "high": 588.1,
+   "actual": 245.6
+  },
+  {
+   "date": "2023-08-10",
+   "expected": 97.5,
+   "low": 9.3,
+   "high": 512.6,
+   "actual": 255.0
+  },
+  {
+   "date": "2023-08-11",
+   "expected": 69.7,
+   "low": 7.2,
+   "high": 443.3,
+   "actual": 246.4
+  },
+  {
+   "date": "2023-08-12",
+   "expected": 80.5,
+   "low": 6.4,
+   "high": 677.9,
+   "actual": 220.1
+  },
+  {
+   "date": "2023-08-13",
+   "expected": 52.6,
+   "low": 4.1,
+   "high": 487.7,
+   "actual": 456.1
+  },
+  {
+   "date": "2023-08-14",
+   "expected": 81.6,
+   "low": 4.9,
+   "high": 579.3,
+   "actual": 717.6
+  },
+  {
+   "date": "2023-08-15",
+   "expected": 85.7,
+   "low": 6.0,
+   "high": 636.1,
+   "actual": 674.0
+  },
+  {
+   "date": "2023-08-16",
+   "expected": 93.1,
+   "low": 6.0,
+   "high": 563.2,
+   "actual": 612.0
+  },
+  {
+   "date": "2023-08-17",
+   "expected": 85.8,
+   "low": 5.3,
+   "high": 545.5,
+   "actual": 620.6
+  },
+  {
+   "date": "2023-08-18",
+   "expected": 54.9,
+   "low": 2.8,
+   "high": 458.7,
+   "actual": 620.6
+  },
+  {
+   "date": "2023-08-19",
+   "expected": 89.4,
+   "low": 6.7,
+   "high": 426.2,
+   "actual": 617.6
+  },
+  {
+   "date": "2023-08-20",
+   "expected": 190.1,
+   "low": 28.3,
+   "high": 643.4,
+   "actual": 392.1
+  },
+  {
+   "date": "2023-08-21",
+   "expected": 97.1,
+   "low": 14.5,
+   "high": 890.5,
+   "actual": 199.9
+  },
+  {
+   "date": "2023-08-22",
+   "expected": 39.5,
+   "low": 6.9,
+   "high": 536.4,
+   "actual": 394.9
+  },
+  {
+   "date": "2023-08-23",
+   "expected": 54.2,
+   "low": 8.9,
+   "high": 575.6,
+   "actual": 527.1
+  },
+  {
+   "date": "2023-08-24",
+   "expected": 56.8,
+   "low": 9.6,
+   "high": 623.4,
+   "actual": 627.6
+  },
+  {
+   "date": "2023-08-25",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 959.0
+  },
+  {
+   "date": "2023-08-26",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1182.7
+  },
+  {
+   "date": "2023-08-27",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1324.0
+  },
+  {
+   "date": "2023-08-28",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1463.6
+  },
+  {
+   "date": "2023-08-29",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1364.6
+  },
+  {
+   "date": "2023-08-30",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1247.4
+  },
+  {
+   "date": "2023-08-31",
+   "expected": 168.7,
+   "low": 15.4,
+   "high": 819.8,
+   "actual": 1132.7
+  },
+  {
+   "date": "2023-09-01",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 857.3
+  },
+  {
+   "date": "2023-09-02",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 708.1
+  },
+  {
+   "date": "2023-09-03",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 540.9
+  },
+  {
+   "date": "2023-09-04",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 296.3
+  },
+  {
+   "date": "2023-09-05",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 196.4
+  },
+  {
+   "date": "2023-09-06",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 162.7
+  },
+  {
+   "date": "2023-09-07",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 153.0
+  },
+  {
+   "date": "2023-09-08",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 98.6
+  },
+  {
+   "date": "2023-09-09",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 31.3
+  },
+  {
+   "date": "2023-09-10",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 106.0
+  },
+  {
+   "date": "2023-09-11",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 230.0
+  },
+  {
+   "date": "2023-09-12",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 322.0
+  },
+  {
+   "date": "2023-09-13",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 327.1
+  },
+  {
+   "date": "2023-09-14",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 336.0
+  },
+  {
+   "date": "2023-09-15",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 386.0
+  },
+  {
+   "date": "2023-09-16",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 633.0
+  },
+  {
+   "date": "2023-09-17",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 659.3
+  },
+  {
+   "date": "2023-09-18",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 567.0
+  },
+  {
+   "date": "2023-09-19",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 525.4
+  },
+  {
+   "date": "2023-09-20",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 568.1
+  },
+  {
+   "date": "2023-09-21",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 672.1
+  },
+  {
+   "date": "2023-09-22",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 881.0
+  },
+  {
+   "date": "2023-09-23",
+   "expected": 16.9,
+   "low": 10.6,
+   "high": 128.5,
+   "actual": 1298.9
+  }
+ ]
+}
