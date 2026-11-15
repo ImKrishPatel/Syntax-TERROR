@@ -37,7 +37,7 @@ export function drawCalendar(element, legendElement, table, mode, focus, onPick)
     for (let m = 0; m < 12; m++) {
       const v = table.value[row][m]
       if (Number.isNaN(v)) {
-        html += '<span class="cal-cell is-missing" title="No data yet"></span>'
+        html += `<button type="button" class="cal-cell is-missing" data-row="${row}" data-month="${m}" aria-label="${MONTHS[m]} ${year}: no data available" aria-disabled="true"></button>`
         continue
       }
       const z = table.score[row][m]
@@ -84,12 +84,13 @@ export function drawCalendar(element, legendElement, table, mode, focus, onPick)
   // --- interaction ----------------------------------------------------------
   element.onclick = event => {
     const cell = event.target.closest('button.cal-cell')
-    if (cell) onPick(table.years[Number(cell.dataset.row)], Number(cell.dataset.month))
+    if (cell && cell.getAttribute('aria-disabled') !== 'true') onPick(table.years[Number(cell.dataset.row)], Number(cell.dataset.month))
   }
 
   const describe = cell => {
     const row = Number(cell.dataset.row), m = Number(cell.dataset.month)
     const v = table.value[row][m], u = table.usual[m]
+    if (!Number.isFinite(v)) return `<b>${MONTHS[m]} ${table.years[row]}</b><br>No data available; this is not zero activity.`
     let text = `<b>${MONTHS[m]} ${table.years[row]}</b>` +
       `<br>${formatValue(v, table.metric)} ${unit}` +
       `<br>Usual ${MONTHS[m]}: ${formatValue(u.median, table.metric)}`

@@ -12,7 +12,8 @@ import { SCORE_STEPS } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { playCalendar, stopCalendar, isPlaying } from './sound.js'
+import { createListeningPanel } from './sound.js'
+import { playCalendar, stopCalendar, isPlaying } from './sweep.js'
 
 const $ = id => document.getElementById(id)
 
@@ -27,6 +28,7 @@ const state = {
   mapYear: null,                   // one year shown on the map (time slider), or null for the selected years
 }
 
+let listening = null
 let mapView = null
 let table = null        // the calendar numbers for the current area and years
 let regimes = null      // { geojson, summary } once loaded
@@ -63,7 +65,8 @@ function writeAddress() {
   } catch (err) { /* some embedded viewers do not allow this; the app still works */ }
 }
 
-function update(changes) {
+function update(changes, fromAudio = false) {
+  if (!fromAudio) listening?.stop()
   Object.assign(state, changes)
   // a selected month must be inside the selected years
   if (state.month) {
@@ -141,6 +144,8 @@ function render() {
     }
   })
 
+  listening?.update(table, picked, JSON.stringify([state.area,state.fromYear,state.toYear,state.metric]), cellsInside > 0, state.mode)
+
   // --- season chart ---
   const overview = overviewVerdict(table)
   const chartYear = picked ? picked.year : (overview.bigYear || state.toYear)
@@ -203,6 +208,14 @@ function renderVerdict(picked, totals, cellsInside) {
     el.innerHTML = where +
       '<h1 class="verdict-sentence">There is no data for this area yet.</h1>' +
       '<p class="verdict-help">No satellite detected a fire here, or the box is over the sea. Drag the box onto land, or search for a place.</p>'
+    return
+  }
+
+  if (picked && !Number.isFinite(table.value[picked.year - table.years[0]]?.[picked.month])) {
+    el.className = 'verdict level-none'
+    el.innerHTML = where + `<h1 class="verdict-sentence">No data for ${MONTHS[picked.month]} ${picked.year}.</h1>` +
+      '<p class="verdict-help">Missing observations do not mean zero activity.</p><button type="button" class="link" id="clearMonth">Back to all years</button>'
+    $('clearMonth').onclick = () => update({ month: null })
     return
   }
 
@@ -445,21 +458,17 @@ function stopListening() {
   stopCalendar()
   markPlaying($('calendar'), null)
   playingAt = null
-  $('listenButton').setAttribute('aria-pressed', 'false')
-  $('listenText').textContent = 'Listen'
   $('mapPlay').setAttribute('aria-pressed', 'false')
   drawMapPeriod(focus())
 }
 
 function startPlaying() {
-  $('listenButton').setAttribute('aria-pressed', 'true')
+  listening?.stop()
   $('mapPlay').setAttribute('aria-pressed', 'true')
-  $('listenText').textContent = 'Stop'
   playCalendar(table, (row, month) => {
     markPlaying($('calendar'), row, month)
     if (row === null || row === undefined) return
     playingAt = { year: table.years[row], month: Number.isInteger(month) ? month : 0 }
-    $('listenText').textContent = `Stop (${table.years[row]})`
     drawMapPeriod(focus())
   }, stopListening)
 }
@@ -551,11 +560,12 @@ function wireControls() {
     }
   })
 
-  // listen (the calendar button and the map's play button share one player; the map follows the sound)
-  $('listenButton').onclick = () => {
-    if (isPlaying()) { stopListening(); return }
-    startPlaying()
-  }
+  // The listening feature shares month selection with the calendar and map.
+  listening = createListeningPanel({
+    onPick: (year, month) => { if (isPlaying()) stopListening(); update({ month: monthKey(year,month) }, true) },
+    onMode: mode => update({mode}),
+    onHighlight: (row, month) => markPlaying($('calendar'),row,month),
+  })
 
   // the ⋮ menu
   const menu = $('appMenu'), menuButton = $('menuButton')
@@ -648,7 +658,7 @@ async function start() {
   renderForecast(forecast)
   renderValidation(validation)
 
-  window.addEventListener('hashchange', () => { readAddress(); render() })
+  window.addEventListener('hashchange', () => { listening?.stop(); readAddress(); render() })
 }
 
 start()

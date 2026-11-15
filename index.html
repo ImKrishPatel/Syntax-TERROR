@@ -143,7 +143,7 @@
             <h2>Burning calendar</h2>
             <p class="panel-sub">Each square is one month in the selected area. Select a square to see that month on the map.</p>
           </div>
-          <button type="button" class="button listen" id="listenButton" aria-pressed="false">
+          <button type="button" class="button listen" id="listenButton" aria-expanded="false" aria-controls="audioPanel">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13.3 3.6a6 6 0 0 1 0 8.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             <span id="listenText">Listen</span>
           </button>
@@ -168,6 +168,17 @@
             </div>
           </div>
         </div>
+        <section class="audio-panel" id="audioPanel" aria-labelledby="audioHeading" hidden>
+          <div class="audio-head"><div><p class="audio-eyebrow">LISTEN TO THE DATA</p><h3 id="audioHeading" tabindex="-1">Hear the fire season</h3></div><span id="audioState" class="audio-status">Ready to explore</span></div>
+          <p class="panel-sub">Follow one year through sound. Each playing month is highlighted in the calendar and shown on the map.</p>
+          <div class="audio-selects"><label class="field"><span>Listening year</span><select id="audioYear"></select></label><label class="field"><span>Listening mode</span><select id="audioMode"><option value="activity">Activity · pulse density</option><option value="anomaly">Unusual activity · tone patterns</option></select></label></div>
+          <div class="audio-now"><h4 id="audioMonth">Select a month</h4><p id="audioDescription"></p><progress id="audioProgress" max="12" value="1" aria-label="Month in the listening year"></progress></div>
+          <div class="audio-transport"><button class="button" id="audioPrevious" aria-label="Previous listening month">←</button><button class="button is-strong" id="audioPlay" aria-pressed="false">Play from here</button><button class="button" id="audioNext" aria-label="Next listening month">→</button><button class="button" id="audioReplay">Replay month</button><button class="button" id="audioStop">Stop all audio</button></div>
+          <div class="audio-settings"><label class="audio-check"><input type="checkbox" id="audioSpeech">Spoken month descriptions</label><label class="field"><span>Playback speed</span><select id="audioSpeed"><option value="0.75">Slow · 0.75×</option><option value="1" selected>Normal · 1×</option><option value="1.5">Fast · 1.5×</option></select></label><label class="field"><span id="audioVolumeText">Volume · 60%</span><input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.6"></label><label class="audio-check"><input type="checkbox" id="audioMute">Mute</label></div>
+          <div class="audio-summary"><h4>Season overview</h4><p id="audioSummaryText"></p><div class="audio-actions"><button class="button" id="audioSummary">Hear summary</button><button class="button" id="audioAnomaly">Jump to strongest anomaly ↗</button></div></div>
+          <details class="audio-guide"><summary>Sound guide · learn what you’re hearing</summary><p>More equal-pitch pulses mean more activity. One lower tone means zero activity. Rising tones mean above usual; falling tones mean below usual; two steady tones mean typical. Two low tones mark missing data, not zero. A separate low pair marks an unavailable comparison.</p><div id="audioExamples" class="audio-examples"></div><p>Examples always play their named pattern. Activity scales within the listening year, so compare values—not loudness or pulse counts—between regions or years.</p></details>
+          <p class="audio-note" id="audioBaseline"></p><p class="audio-note">Sound represents data, not recordings of actual fires. Turn spoken descriptions off if you prefer your screen reader. Summary speech follows playback speed, with a fixed 0.5-second pause after periods and semicolons.</p><p class="audio-note" id="audioSupport"></p><p id="audioError" role="alert"></p>
+        </section>
         <div class="calendar" id="calendar" role="grid" aria-label="Burning calendar: years down, months across"></div>
         <div class="calendar-legend" id="calendarLegend"></div>
       </section>
