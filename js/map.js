@@ -48,59 +48,90 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const areaCanvas = makePane('area', 400, false)
 
   // -------------------------------------------------------------------------
-  // Basemap: NASA MODIS Terra false colour, bands 7-2-1 (NASA GIBS, free, no key).
-  // The same imagery as the CONAE fire maps in the challenge video: burn scars
-  // dark red-brown, active fire fronts orange, vegetation green, snow/ice cyan,
-  // clouds white. It is dated to the period the map shows. Esri World Imagery
-  // sits underneath only to fill gaps between daily satellite swaths.
+  // Basemap: a cloud-free NASA MODIS false-colour picture (bands 7-2-1), like the
+  // CONAE fire images in the challenge video: burn scars deep red, vegetation green,
+  // bare land khaki. No labels or borders, so the land itself tells the story.
+  //
+  // MODIS passes are daily and often cloudy, so each map tile is a composite:
+  // Terra and Aqua passes from several days around the chosen date are stacked
+  // and, for every pixel, a low-brightness pass is kept. Clouds are bright and the
+  // black gaps between satellite swaths are empty, so both drop out.
+  // Imagery: NASA GIBS (free, no key, allows the browser to read the pixels).
   // -------------------------------------------------------------------------
-  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/'
   const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'
-  const gapFill = L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    pane: 'imagery', maxNativeZoom: 18, opacity: 0.55,
-    attribution: 'Gap fill © Esri, Maxar, Earthstar Geographics',
-  }).addTo(map)
+  const SENSORS = ['MODIS_Terra', 'MODIS_Aqua']
+  const DAY_OFFSETS = [-6, -3, 0, 3, 6]
   let imageryDate = CONFIG.imageryDefaultDate || '2025-08-15'
-  const falseColor = L.tileLayer(GIBS + 'MODIS_Terra_CorrectedReflectance_Bands721/default/{time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg', {
-    pane: 'imagery', maxNativeZoom: 9, time: imageryDate, bounds: [[-85, -180], [85, 180]],
-    attribution: 'Imagery: NASA GIBS / Worldview, MODIS Terra bands 7-2-1',
+  const shiftDate = (date, days) => new Date(Date.parse(date) + days * 864e5).toISOString().slice(0, 10)
+  const TODAY = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
+
+  const loadImage = url => new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = url
   })
-  falseColor.getTileUrl = function (c) { return L.TileLayer.prototype.getTileUrl.call(this, c).replace('{time}', imageryDate) }
-  falseColor.addTo(map)
-  const imageryLabels = L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-    pane: 'imageryLabels', maxNativeZoom: 18,
+
+  function compositeTile(canvas, coords, date, done) {
+    const urls = []
+    for (const sensor of SENSORS) for (const off of DAY_OFFSETS) {
+      const d = shiftDate(date, off)
+      if (d > TODAY) continue
+      urls.push(`${GIBS}${sensor}_CorrectedReflectance_Bands721/default/${d}/GoogleMapsCompatible_Level9/${coords.z}/${coords.y}/${coords.x}.jpg`)
+    }
+    Promise.all(urls.map(loadImage)).then(images => {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      const layers = []
+      for (const img of images) {
+        if (!img) continue
+        ctx.clearRect(0, 0, 256, 256)
+        ctx.drawImage(img, 0, 0, 256, 256)
+        try { layers.push(ctx.getImageData(0, 0, 256, 256).data) } catch (err) { /* pixels not readable */ }
+      }
+      const out = ctx.createImageData(256, 256)
+      const o = out.data
+      const pick = new Array(layers.length)
+      for (let p = 0; p < o.length; p += 4) {
+        let n = 0
+        for (const L of layers) {
+          const r = L[p], g = L[p + 1], b = L[p + 2]
+          if (r + g + b < 24) continue            // no-data gap between swaths
+          pick[n++] = [b + 0.5 * g, r, g, b]       // clouds and snow are bright in bands 1 and 2
+        }
+        if (!n) { o[p + 3] = 0; continue }
+        const sorted = pick.slice(0, n).sort((x, y) => x[0] - y[0])
+        const c = sorted[Math.floor((n - 1) * 0.3)] // a low pass, but not the darkest (cloud shadows)
+        o[p] = c[1]; o[p + 1] = c[2]; o[p + 2] = c[3]; o[p + 3] = 255
+      }
+      ctx.putImageData(out, 0, 0)
+      done(null, canvas)
+    })
+  }
+
+  const FalseColor = L.GridLayer.extend({
+    createTile(coords, done) {
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = 256
+      compositeTile(canvas, coords, imageryDate, done)
+      return canvas
+    },
+  })
+  const falseColor = new FalseColor({
+    pane: 'imagery', maxNativeZoom: 9, bounds: [[-85, -180], [85, 180]], keepBuffer: 1,
+    attribution: 'Imagery: NASA GIBS / Worldview, MODIS Terra and Aqua corrected reflectance, bands 7-2-1',
   }).addTo(map)
   const vectorBase = L.layerGroup()   // Natural Earth outlines; only used if the tiles can't load
   element.classList.add('is-satellite')
 
-  // date string for the imagery: mid-month of the shown month, or the peak-fire month of a shown year
+  // the picture shows the days around this date (mid-month of the shown month, by default)
   function setImageryDate(date) {
-    const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
-    const d = date > yesterday ? yesterday : date < '2000-03-01' ? '2000-03-01' : date
+    const d = date > TODAY ? TODAY : date < '2000-03-01' ? '2000-03-01' : date
     if (d === imageryDate) return
     imageryDate = d
     falseColor.redraw()
     const cap = document.getElementById('imageryDate')
-    if (cap) cap.textContent = d
-  }
-
-  // locator inset (top right in the CONAE maps): the world with a box where the main map is
-  const insetEl = document.getElementById('mapInset')
-  let inset = null, insetBox = null
-  if (insetEl) {
-    inset = L.map(insetEl, { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
-      doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, worldCopyJump: false })
-    L.tileLayer(GIBS + 'BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg', { maxNativeZoom: 8 }).addTo(inset)
-    inset.setView([20, 0], 0)
-    insetBox = L.rectangle([[0, 0], [1, 1]], { color: '#ff3b30', weight: 2, fill: false, interactive: false }).addTo(inset)
-    const sync = () => {
-      const b = map.getBounds()
-      insetBox.setBounds(b)
-      inset.setView(b.getCenter(), Math.max(0, Math.min(3, map.getZoom() - 4)), { animate: false })
-    }
-    map.on('moveend zoomend', sync)
-    if (window.ResizeObserver) new ResizeObserver(() => inset.invalidateSize()).observe(insetEl)
-    map.whenReady(sync)
+    if (cap) cap.textContent = `${shiftDate(d, DAY_OFFSETS[0])} to ${shiftDate(d, DAY_OFFSETS.at(-1)) > TODAY ? TODAY : shiftDate(d, DAY_OFFSETS.at(-1))}`
   }
 
   let places = []
