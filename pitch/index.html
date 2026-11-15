@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember · NASA Space Apps 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,400..700,0..100;1,9..144,400..700,0..100&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============ EDIT ME ============
+   Team name, challenge, member names, app URL live in the CONFIG block in the script at the bottom.
+   Theme: "satellite field map" — map paper, contour lines, a scan swath that lights up fires. */
+:root{
+  --paper:#F5F0E6; --paper2:#FBF8F2; --ink:#1C1A17; --mut:#5F5A52; --dim:#9A9387; --line:#E2DACB; --grid:#D9CFBC;
+  --ember:#E2550F; --flame:#C8321E; --gold:#B7791F; --sat:#0E6E7E; --ok:#2E8B57;
+  --r1:#E69F00; --r2:#3C9AD0; --r3:#D55E00; --r4:#009E73;
+  --tone:var(--ember);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#E9E2D4;overflow:hidden;font-family:'Inter',system-ui,sans-serif;color:var(--ink)}
+.mono{font-family:'JetBrains Mono',monospace}
+.serif{font-family:'Fraunces',Georgia,serif}
+#wrap{position:fixed;inset:0;overflow:hidden}
+#stage{width:1920px;height:1080px;position:absolute;left:50%;top:50%;transform-origin:center center;background:var(--paper);overflow:hidden;border-radius:4px;box-shadow:0 30px 80px #0000002a}
+#bg{position:absolute;inset:0;width:100%;height:100%}
+/* map frame: tick marks + corner coordinates, like a printed sheet */
+#frame{position:absolute;inset:34px;border:1.5px solid var(--grid);pointer-events:none;z-index:1}
+#frame .c{position:absolute;font:500 14px 'JetBrains Mono';color:var(--dim);letter-spacing:.06em}
+#frame .tl{top:-26px;left:0} #frame .tr{top:-26px;right:0} #frame .bl{bottom:-26px;left:0} #frame .br{bottom:-26px;right:0}
+#frame .ticks{position:absolute;inset:0;background:
+  repeating-linear-gradient(90deg,var(--grid) 0 1.5px,transparent 1.5px 120px) top/100% 10px no-repeat,
+  repeating-linear-gradient(90deg,var(--grid) 0 1.5px,transparent 1.5px 120px) bottom/100% 10px no-repeat,
+  repeating-linear-gradient(0deg,var(--grid) 0 1.5px,transparent 1.5px 120px) left/10px 100% no-repeat,
+  repeating-linear-gradient(0deg,var(--grid) 0 1.5px,transparent 1.5px 120px) right/10px 100% no-repeat}
+/* ---------- slides ---------- */
+.slide{position:absolute;inset:0;padding:100px 140px 120px;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:2}
+.slide.active{opacity:1;pointer-events:auto}
+.r{opacity:0;transform:translateY(22px)}
+.slide.active .r{animation:rise .85s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(var(--d,0)*1s)}
+.r.zoom{transform:scale(.88)}
+@keyframes rise{to{opacity:1;transform:none}}
+.kicker{font:600 20px/1 'JetBrains Mono',monospace;letter-spacing:.24em;text-transform:uppercase;color:var(--tone);display:flex;align-items:center;gap:14px}
+.kicker:before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;box-shadow:0 0 0 6px color-mix(in srgb,currentColor 18%,transparent)}
+h1{font-family:'Fraunces',Georgia,serif;font-size:170px;font-weight:600;letter-spacing:-.035em;line-height:.92;font-variation-settings:"SOFT" 50,"opsz" 144}
+h2{font-family:'Fraunces',Georgia,serif;font-size:80px;font-weight:600;letter-spacing:-.025em;line-height:1.02;margin-top:22px;font-variation-settings:"opsz" 144}
+h2 em,h1 em{font-style:italic;color:var(--tone)}
+.lead{font-size:31px;line-height:1.45;color:var(--mut);max-width:1100px;margin-top:24px}
+.lead b{color:var(--ink);font-weight:700}
+.pill-row{display:flex;gap:12px;margin-top:40px;flex-wrap:wrap}
+.pill{font:500 19px/1 'JetBrains Mono',monospace;padding:13px 18px;border-radius:999px;border:1.5px solid var(--line);color:var(--mut);background:var(--paper2)}
+.pill.hot{border-color:color-mix(in srgb,var(--ember) 45%,transparent);color:var(--ember);background:color-mix(in srgb,var(--ember) 8%,var(--paper2))}
+.card{background:var(--paper2);border:1.5px solid var(--line);border-radius:22px;padding:36px;box-shadow:0 1px 0 #fff inset,0 18px 40px -22px #5a4a2a40}
+.src{font:400 15px/1.4 'JetBrains Mono',monospace;color:var(--dim)}
+.tone-red{--tone:var(--flame)} .tone-ember{--tone:var(--ember)} .tone-sat{--tone:var(--sat)} .tone-gold{--tone:var(--gold)}
+/* ---------- s1 cover ---------- */
+.cover{display:grid;grid-template-columns:420px 1fr;gap:90px;align-items:center;height:100%}
+.logo{width:420px;height:420px;border-radius:50%;background:radial-gradient(circle at 50% 60%,#FFE7D1 0%,var(--paper2) 62%);border:1.5px solid var(--line);display:grid;place-items:center;position:relative}
+.logo:before,.logo:after{content:"";position:absolute;inset:-26px;border-radius:50%;border:1.5px dashed var(--grid)}
+.logo:after{inset:-60px;border-style:solid;border-color:#E2DACB80;animation:orbit 18s linear infinite}
+.logo .satdot{position:absolute;top:-68px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--sat);box-shadow:0 0 0 6px #0E6E7E22;transform-origin:8px 278px;animation:orbit 9s linear infinite}
+@keyframes orbit{to{transform:rotate(360deg)}}
+.logo svg{width:250px;height:250px;filter:drop-shadow(0 18px 24px #E2550F40)}
+.flick{animation:flick 2.4s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes flick{0%,100%{transform:scale(1) rotate(0)}30%{transform:scale(1.04,0.97) rotate(-1.5deg)}60%{transform:scale(.98,1.04) rotate(1deg)}}
+.title-ember{background:linear-gradient(100deg,#C8321E 0%,#E2550F 45%,#F2A03D 100%);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.08em}
+.for{font-family:'Fraunces',serif;font-style:italic;font-size:44px;color:var(--sat);margin-top:14px}
+.tagline{font-size:46px;font-weight:600;margin-top:26px;letter-spacing:-.02em}
+.tagline span{color:var(--ember);font-family:'Fraunces',serif;font-style:italic;font-weight:600}
+.team{margin-top:46px;display:flex;gap:44px;flex-wrap:wrap}
+.team div{font-size:24px;color:var(--mut)} .team b{display:block;color:var(--ink);font-size:28px;margin-bottom:6px}
+/* ---------- s2 problem ---------- */
+.two{display:grid;grid-template-columns:1.05fr .95fr;gap:80px;align-items:center;height:100%}
+.big{font-family:'Fraunces',serif;font-size:210px;font-weight:700;letter-spacing:-.05em;line-height:.9;color:var(--flame)}
+.big small{font-family:'Inter',sans-serif;font-size:56px;letter-spacing:-.02em;margin-left:12px;color:var(--ink);font-weight:700}
+.meter-row{margin-top:30px}
+.meter-row .l{display:flex;justify-content:space-between;font-size:24px;color:var(--mut);margin-bottom:12px}
+.meter{height:24px;border-radius:99px;background:#E9E1D2;overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:99px;background:repeating-linear-gradient(-45deg,var(--flame) 0 10px,var(--ember) 10px 20px);transition:width 1.6s cubic-bezier(.2,.8,.2,1)}
+.meter.cool i{background:#B9AE9B}
+.dark-sat{position:relative;padding-left:120px}
+.sat-ico{position:absolute;left:0;top:6px;width:84px;height:84px}
+.sat-ico .body{animation:dim 3.5s ease-in-out infinite 1.5s}
+@keyframes dim{0%,40%{opacity:1}70%,100%{opacity:.15}}
+.alert-line{font-family:'Fraunces',serif;font-size:44px;font-weight:600;line-height:1.18}
+.alert-line em{font-style:italic;color:var(--ember)}
+.vidbtn{margin-top:26px;display:flex;align-items:center;gap:18px;width:100%;padding:16px;border-radius:18px;border:1.5px solid color-mix(in srgb,var(--flame) 35%,transparent);background:color-mix(in srgb,var(--flame) 6%,var(--paper2));cursor:pointer;color:var(--ink);font:inherit;text-align:left}
+.vidbtn:hover{background:color-mix(in srgb,var(--flame) 12%,var(--paper2))}
+.vidbtn .thumb{width:170px;height:96px;border-radius:12px;background:#2a2622 center/cover;display:grid;place-items:center;flex:none}
+.vidbtn .thumb i{width:52px;height:52px;border-radius:50%;background:var(--flame);display:grid;place-items:center;box-shadow:0 6px 18px #C8321E66}
+.vidbtn b{font-size:24px;display:block} .vidbtn span{font-size:18px;color:var(--mut)}
+#vidModal{position:absolute;inset:0;background:#F5F0E6f2;z-index:30;display:none;place-items:center;backdrop-filter:blur(6px)}
+#vidModal.on{display:grid}
+#vidModal .box{width:1440px;height:810px;border-radius:20px;overflow:hidden;border:1.5px solid var(--line);box-shadow:0 40px 100px #3a2a1040;position:relative;background:#111}
+#vidModal iframe{width:100%;height:100%;border:0}
+#vidModal .x{position:absolute;top:30px;right:60px;font:600 20px 'JetBrains Mono';color:var(--mut);background:var(--paper2);border:1.5px solid var(--line);border-radius:12px;padding:10px 18px;cursor:pointer}
+#vidModal .cap{position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:20px;color:var(--mut)}
+.prob{display:grid;grid-template-columns:1.5fr .85fr;gap:44px;margin-top:34px}
+.chart{padding:30px 34px 22px;display:flex;flex-direction:column}
+.chart-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.seg{display:flex;background:#EDE5D6;border-radius:999px;padding:5px}
+.seg button{font:600 19px 'Inter';border:0;background:none;padding:11px 22px;border-radius:999px;color:var(--mut);cursor:pointer;transition:all .3s}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px #5a4a2a26}
+.seg button[data-m=ember].on{background:var(--ember);color:#fff}
+.lg{display:flex;gap:20px;font:500 17px 'JetBrains Mono';color:var(--mut)} .lg i{display:inline-block;width:14px;height:14px;border-radius:3px;margin-right:8px;vertical-align:-1px}
+#trend{width:100%;height:470px}
+#trend rect{transition:y .9s cubic-bezier(.2,.8,.2,1),height .9s cubic-bezier(.2,.8,.2,1),fill .6s}
+.callout{font-size:24px;font-weight:600;min-height:34px;margin:4px 0 8px;transition:color .4s}
+.callout em{font-style:normal;color:var(--flame)} .callout b{color:var(--ok)}
+.side{display:flex;flex-direction:column;gap:16px}
+.hz{display:flex;flex-direction:column}
+.hz-h{font:700 18px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase;color:var(--sat);margin-bottom:14px}
+.hz-list{position:relative;display:flex;flex-direction:column;gap:12px}
+.hz-line{position:absolute;left:27px;top:28px;bottom:28px;width:3px;background:var(--line)}
+.hz-line i{position:absolute;left:0;top:0;width:100%;height:0;background:linear-gradient(var(--sat),var(--ember));transition:height .5s linear}
+.hz-step{display:grid;grid-template-columns:56px 1fr;gap:16px;align-items:center;opacity:.28;transform:translateX(-8px);transition:all .45s}
+.hz-step.on{opacity:1;transform:none}
+.hn{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--paper2);border:2px solid var(--line);font:700 22px 'JetBrains Mono';color:var(--dim);position:relative;z-index:1;transition:all .4s}
+.hz-step.on .hn{background:var(--sat);border-color:var(--sat);color:#fff}
+.hz-step.last.on .hn{background:var(--ember);border-color:var(--ember)}
+.hz-step b{display:block;font-size:22px} .hz-step span{font-size:17px;color:var(--mut);line-height:1.35}
+.hz .vidbtn{margin-top:18px;padding:12px}
+.hz .vidbtn .thumb{width:120px;height:68px}
+.sensor{display:grid;grid-template-columns:120px 1fr;gap:18px;align-items:center;padding:18px 22px;border:1.5px solid var(--line);border-radius:18px;background:var(--paper2)}
+.sensor .sn{font:700 24px 'JetBrains Mono';letter-spacing:.08em}
+.sensor b{font-size:22px;display:block} .sensor span{font-size:19px;color:var(--mut);line-height:1.4}
+.sensor.q{border-style:dashed;border-color:color-mix(in srgb,var(--flame) 40%,transparent)} .sensor.q .sn{color:var(--flame);font-size:40px}
+.side .vidbtn{margin-top:4px}
+.who{display:grid;grid-template-columns:1.2fr 540px;gap:70px;align-items:center;height:100%}
+.users{display:flex;flex-direction:column;gap:14px;margin-top:40px}
+.feats-h{font:700 17px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase;color:var(--sat);margin-top:34px}
+.feats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.ft{display:grid;grid-template-columns:54px 1fr;column-gap:16px;align-items:center;padding:14px 18px;border:1.5px solid var(--line);border-radius:16px;background:var(--paper2)}
+.ft .fi{grid-row:span 2;width:54px;height:54px;border-radius:14px;background:#EFE8DA;display:grid;place-items:center;font-size:26px}
+.ft b{font-size:22px} .ft span{font-size:17px;color:var(--mut);line-height:1.35}
+.ft.wide{grid-column:span 2;border-color:color-mix(in srgb,var(--sat) 45%,transparent);background:color-mix(in srgb,var(--sat) 6%,var(--paper2))}
+.user{display:grid;grid-template-columns:64px 1fr;gap:18px;align-items:center;padding:16px 22px;border:1.5px solid var(--line);border-radius:18px;background:var(--paper2)}
+.user .ui{width:64px;height:64px;border-radius:50%;background:#EFE8DA;display:grid;place-items:center;font-size:30px}
+.user b{font-size:25px;display:block} .user span{font-size:20px;color:var(--mut)}
+.phone{background:#fff;border:1.5px solid var(--line);border-radius:44px;padding:24px 22px 18px;height:840px;display:flex;flex-direction:column;box-shadow:0 40px 80px -30px #3a2a1066}
+.bot-note{display:grid;grid-template-columns:46px 1fr;gap:12px;align-items:center;margin-top:12px;padding:12px 14px;border-radius:18px;background:color-mix(in srgb,var(--ember) 8%,#fff);border:1.5px solid color-mix(in srgb,var(--ember) 35%,transparent)}
+.bot-ic{width:46px;height:46px;border-radius:50%;background:var(--ember);display:grid;place-items:center;font-size:22px}
+.bot-note b{display:block;font-size:19px} .bot-note span{font-size:15px;color:var(--mut)}
+.ph-top{display:flex;gap:16px;align-items:center;padding-bottom:16px;border-bottom:1.5px solid var(--line)}
+.ph-av{width:56px;height:56px;border-radius:50%;background:var(--sat);color:#fff;display:grid;place-items:center;font-weight:800;font-size:24px}
+.ph-top b{font-size:23px;display:block} .ph-top span{font-size:17px;color:var(--mut)}
+.chat{flex:1;display:flex;flex-direction:column;gap:10px;padding-top:16px}
+.msg{max-width:86%;padding:11px 16px;border-radius:20px;font-size:18.5px;line-height:1.35;opacity:0;transform:translateY(12px) scale(.96);transition:all .45s cubic-bezier(.2,.8,.2,1)}
+.msg.show{opacity:1;transform:none}
+.msg.in{background:#EFE8DA;align-self:flex-start;border-bottom-left-radius:6px}
+.msg.out{background:var(--sat);color:#fff;align-self:flex-end;border-bottom-right-radius:6px}
+.msg.out b{color:#FFE2CC} .msg.in b{color:var(--ember)}
+.msg.sys{background:color-mix(in srgb,var(--ember) 10%,#fff);border:1.5px solid color-mix(in srgb,var(--ember) 40%,transparent)}
+.flag{display:inline-block;font:700 15px 'JetBrains Mono';color:#fff;background:var(--ember);padding:4px 10px;border-radius:8px;margin:0 4px}
+.typing{display:flex;gap:6px;padding:14px 18px;background:#EFE8DA;border-radius:22px;align-self:flex-start;opacity:0;transition:opacity .3s}
+.typing.show{opacity:1}
+.typing i{width:9px;height:9px;border-radius:50%;background:#9A9387;animation:bounce 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bounce{50%{transform:translateY(-6px)}}
+.nasa{position:absolute;left:140px;right:140px;bottom:110px;display:grid;grid-template-columns:180px repeat(4,1fr);gap:16px;align-items:stretch}
+.nasa-h{font:700 17px 'JetBrains Mono';letter-spacing:.12em;text-transform:uppercase;color:var(--sat);display:flex;align-items:center;line-height:1.4}
+.nd{border:1.5px solid var(--line);background:var(--paper2);border-radius:16px;padding:14px 18px}
+.nd b{display:block;font:700 18px 'JetBrains Mono';color:var(--ink)} .nd span{font-size:17px;color:var(--mut)}
+.future{position:absolute;left:140px;right:140px;bottom:230px;display:grid;grid-template-columns:180px repeat(4,1fr);gap:16px;align-items:stretch}
+.fa{border:1.5px dashed color-mix(in srgb,var(--ember) 45%,transparent);background:color-mix(in srgb,var(--ember) 5%,var(--paper2));border-radius:16px;padding:14px 18px}
+.fa b{display:block;font-size:20px;color:var(--ink)} .fa span{font-size:17px;color:var(--mut)}
+.pix,.spark{margin-top:auto;height:210px} .pix svg,.spark svg{width:100%;height:100%}
+.pix rect{transition:all .7s cubic-bezier(.2,.8,.2,1)}
+.proof{display:flex;gap:16px;align-items:center;margin-top:16px;padding-top:16px;border-top:1.5px dashed var(--line)}
+.pv{font-family:'Fraunces',serif;font-size:62px;font-weight:700;color:var(--sat);line-height:1;white-space:nowrap}
+.pl{font-size:18px;font-weight:600;line-height:1.35} .pl small{font-weight:400;color:var(--mut);font-size:15px}
+.impact{display:flex;flex-direction:column;gap:14px;margin-top:40px;max-width:1000px}
+.impact div{font-size:27px;color:var(--mut);padding-left:22px;border-left:4px solid var(--ember)}
+.impact b{color:var(--ink);margin-right:12px}
+/* ---------- s3 team + process ---------- */
+.tp{display:grid;grid-template-columns:600px 1fr;gap:70px;margin-top:30px}
+.member{display:flex;align-items:center;gap:20px;padding:8px 0;border-bottom:1.5px dashed var(--line)}
+.av{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:26px;color:#fff;flex:none}
+.member b{font-size:28px;display:block} .member span{font-size:21px;color:var(--mut)}
+.pipe{position:relative;margin-top:10px}
+.pipe-line{position:absolute;left:43px;top:40px;bottom:40px;width:3px;background:var(--line)}
+.pipe-line i{position:absolute;left:0;top:0;width:100%;height:0;background:linear-gradient(var(--sat),var(--ember));transition:height .5s linear}
+.step{display:grid;grid-template-columns:90px 1fr;gap:26px;align-items:center;padding:6px 0;opacity:.3;transition:opacity .5s,transform .5s;transform:translateX(-10px)}
+.step.on{opacity:1;transform:none}
+.step-n{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;background:var(--paper2);border:2px solid var(--line);font:600 28px 'JetBrains Mono';color:var(--dim);position:relative;z-index:1;transition:all .4s}
+.step.on .step-n{border-color:var(--tone);color:#fff;background:var(--tone);box-shadow:0 10px 24px -8px var(--tone)}
+.step:last-child.on .step-n{background:var(--ember);border-color:var(--ember)}
+.step b{font-size:32px;display:block} .step span{font-size:23px;color:var(--mut)}
+.step .tag{font:600 16px 'JetBrains Mono';color:var(--sat);margin-left:10px;letter-spacing:.06em}
+.hpipe{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:30px;margin-top:28px}
+.hpipe .pipe-line{position:absolute;left:36px;right:36px;top:35px;height:4px;width:auto;bottom:auto;background:var(--line)}
+.hpipe .pipe-line i{position:absolute;left:0;top:0;height:100%;width:0;background:linear-gradient(90deg,var(--sat),var(--ember));transition:width .6s linear}
+.hpipe .step{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:0;transform:translateY(14px)}
+.hpipe .step.on{transform:none}
+.hpipe .step-n{width:72px;height:72px;font-size:24px;margin-bottom:8px}
+.hpipe .step b{font-family:'Fraunces',serif;font-size:34px;font-weight:600}
+.hpipe .step span{font-size:19px;line-height:1.35;color:var(--mut)}
+.uh-h{font:700 17px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase;color:var(--sat);margin-top:30px}
+.mods{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px}
+.mod{border:1.5px solid var(--line);background:var(--paper2);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:7px;min-height:0;position:relative}
+.mod .mt{font-size:21px;font-weight:700;line-height:1.25}
+.mod p{font-size:16.5px;color:var(--mut);line-height:1.35}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto}
+.chips i,.bottom2 i{font:500 14px 'JetBrains Mono';font-style:normal;padding:6px 10px;border-radius:999px;background:#EFE8DA;color:var(--ink)}
+.mod.usp-c{border-color:color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 9%,#fff)}
+.mod.usp-c .mt{color:color-mix(in srgb,var(--c) 75%,#1C1A17)}
+.mod.usp-c .chips i{background:color-mix(in srgb,var(--c) 16%,#fff)}
+.usp-tag{position:absolute;top:-11px;right:14px;font:700 12px 'JetBrains Mono';letter-spacing:.06em;color:#fff;background:var(--c);padding:4px 9px;border-radius:999px}
+.bottom2{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.bottom2>div{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.b2h{font:700 17px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase;color:var(--sat);margin-right:6px}
+.bottom2 i.f{background:color-mix(in srgb,var(--ember) 10%,#fff);border:1px dashed color-mix(in srgb,var(--ember) 45%,transparent)}
+/* ---------- s4 demo ---------- */
+.demo{display:flex;flex-direction:column;height:100%}
+.vhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:34px}
+.vhead h2{margin-top:14px} .vhead h2 em{color:var(--sat)}
+.vhead small{font:600 20px 'JetBrains Mono';letter-spacing:.24em;color:var(--mut);text-transform:uppercase}
+.screen{position:relative;flex:1;border-radius:22px;overflow:hidden;border:1.5px solid var(--line);background:var(--paper2);box-shadow:0 40px 90px -30px #3a2a1055}
+.screen .bar{height:54px;background:#EFE8DA;display:flex;align-items:center;gap:12px;padding:0 22px;border-bottom:1.5px solid var(--line)}
+.screen .bar i{width:14px;height:14px;border-radius:50%;background:#D6CBB6}
+.screen .bar .url{margin-left:18px;font:500 18px 'JetBrains Mono';color:var(--mut);background:var(--paper2);padding:8px 18px;border-radius:10px;flex:1}
+.live-tag{font:700 16px 'JetBrains Mono';color:var(--flame);display:flex;align-items:center;gap:8px}
+.live-tag:before{content:"";width:10px;height:10px;border-radius:50%;background:var(--flame);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.view{position:absolute;top:54px;left:0;right:0;bottom:0;display:grid;place-items:center}
+.view iframe,.view img,.view video{width:100%;height:100%;border:0;object-fit:contain;background:#fff}
+.drop{display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center;color:var(--mut);font-size:26px;cursor:pointer;padding:60px;border:2px dashed var(--grid);border-radius:22px;transition:border-color .3s}
+.drop:hover,.drop.over{border-color:var(--sat);color:var(--ink)}
+.drop b{color:var(--ink);font-size:34px}
+.btn{font:700 22px 'Inter';padding:16px 28px;border-radius:999px;border:0;cursor:pointer;background:var(--sat);color:#fff;text-decoration:none}
+.btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--mut)}
+/* ---------- s5 features ---------- */
+.feat{display:grid;grid-template-columns:1fr 1fr 1fr;gap:34px;margin-top:46px}
+.feat .card{height:660px;display:flex;flex-direction:column}
+.feat h3{font-family:'Fraunces',serif;font-size:40px;font-weight:600;margin-top:20px}
+.feat p{font-size:22px;color:var(--mut);line-height:1.45;margin-top:12px}
+.ftag{font:600 16px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase}
+.hexes{margin-top:auto;height:280px;position:relative}
+.hexes svg{width:100%;height:100%}
+.hexes polygon{transition:opacity .4s, fill .5s;opacity:0;stroke:var(--paper2);stroke-width:2}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.legend button{font:600 16px 'Inter';padding:9px 14px;border-radius:99px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:8px}
+.legend button i{width:12px;height:12px;border-radius:3px}
+.legend button.sel{border-color:var(--ink);background:#fff}
+.bars{margin-top:auto;display:flex;flex-direction:column;gap:22px}
+.hb .l{display:flex;justify-content:space-between;font-size:20px;color:var(--mut);margin-bottom:8px}
+.hb .l b{color:var(--ink)}
+.hb .t{height:22px;border-radius:99px;background:#ECE4D5;overflow:hidden}
+.hb .t i{display:block;height:100%;width:0;border-radius:99px;transition:width 1.4s cubic-bezier(.2,.8,.2,1)}
+.wave{margin-top:auto;height:200px;position:relative}
+.wave canvas{width:100%;height:100%}
+.play{margin-top:18px;display:flex;align-items:center;gap:14px}
+.play button{width:72px;height:72px;border-radius:50%;border:0;cursor:pointer;background:var(--ember);display:grid;place-items:center;box-shadow:0 10px 24px -6px #E2550F88}
+.play span{font-size:19px;color:var(--mut)}
+.ba{position:relative;aspect-ratio:1640/470;border-radius:22px;overflow:hidden;border:1.5px solid var(--line);background:#F1EADD;cursor:ew-resize;user-select:none;touch-action:none}
+.ba canvas{position:absolute;inset:0;width:100%;height:100%}
+#baEmb{clip-path:inset(0 0 0 50%)}
+.ba-lab{position:absolute;top:20px;font:700 17px 'JetBrains Mono';letter-spacing:.1em;padding:8px 14px;border-radius:10px;background:#FBF8F2e6}
+.ba-lab.l{left:20px;color:#5E8A92} .ba-lab.r2{right:20px;color:var(--ember)}
+.ba-handle{position:absolute;top:0;bottom:0;left:50%;width:4px;margin-left:-2px;background:var(--ink)}
+.ba-handle i{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font:700 15px 'JetBrains Mono';font-style:normal;box-shadow:0 8px 20px #0004}
+.ba-note{position:absolute;bottom:16px;left:20px;font:400 15px 'JetBrains Mono';color:var(--dim)}
+.proofs{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:30px;margin-top:26px}
+.proofs>div{display:flex;gap:16px;align-items:center}
+.playbox button{width:64px;height:64px;border-radius:50%;border:0;cursor:pointer;background:var(--ember);display:grid;place-items:center;flex:none;box-shadow:0 10px 24px -6px #E2550F88}
+.playbox canvas{width:220px;height:60px}
+.usp-grid{display:block;margin-top:24px}
+.ba-wrap{box-shadow:0 30px 60px -36px #3a2a1066}
+.usps{display:flex;flex-direction:column;gap:12px}
+.usp{display:grid;grid-template-columns:48px 1fr;gap:16px;align-items:center;padding:14px 18px;border:1.5px solid var(--line);border-radius:16px;background:var(--paper2)}
+.un{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#F3E7CF;font-size:22px}
+.usp b{display:block;font-size:23px} .usp span{font-size:18px;color:var(--mut)}
+.cmp{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.cmp-row{display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center;font-size:17px;color:var(--mut)}
+.cmp-row b{font-size:17px}
+.cmp-t{height:16px;border-radius:99px;background:#ECE4D5;overflow:hidden}
+.cmp-t i{display:block;height:100%;width:0;border-radius:99px;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.trio{display:grid;grid-template-columns:1fr 1fr 1.35fr;gap:22px;margin-top:22px}
+.tc{padding:20px 24px} .tc-row{display:flex;align-items:center;gap:18px;margin-top:10px}
+.tc .pv{font-size:64px}
+.hear button{width:64px;height:64px;flex:none;border-radius:50%;border:0;cursor:pointer;background:var(--ember);display:grid;place-items:center;box-shadow:0 10px 24px -6px #E2550F88;transition:transform .2s}
+.hear button:hover{transform:scale(1.06)}
+.hear button.on{background:var(--flame);animation:pulse2 1s infinite}
+@keyframes pulse2{50%{box-shadow:0 0 0 12px #C8321E22}}
+.hear canvas{flex:1;height:84px;min-width:0}
+.why{font-size:16px;color:var(--mut);line-height:1.4;margin-top:8px} .why b{color:var(--ink)}
+#sndMsg{color:var(--flame);font-weight:600}
+/* ---------- s6 results ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;margin-top:52px}
+.stat .v{font-family:'Fraunces',serif;font-size:118px;font-weight:700;letter-spacing:-.04em;line-height:1;color:var(--tone)}
+.stat .l{font-size:27px;font-weight:700;margin-top:14px}
+.stat .d{font-size:21px;color:var(--mut);margin-top:10px;line-height:1.45}
+/* ---------- s7 end ---------- */
+.end{display:grid;grid-template-columns:1fr 420px;gap:100px;align-items:center;height:100%}
+.end h1{font-size:104px}
+.qr{width:420px;height:420px;background:#fff;border-radius:26px;padding:30px;display:grid;place-items:center;border:1.5px solid var(--line);box-shadow:0 30px 70px -30px #3a2a1066;position:relative}
+.qr:after{content:"SCAN TO TRY EMBER";position:absolute;bottom:-44px;left:0;right:0;text-align:center;font:600 16px 'JetBrains Mono';letter-spacing:.3em;color:var(--dim)}
+.qr img,.qr canvas{width:360px!important;height:360px!important}
+.qr .fallback{color:var(--ink);font:600 22px 'JetBrains Mono';text-align:center;word-break:break-all}
+/* ---------- chrome ---------- */
+#progress{position:absolute;left:34px;bottom:34px;height:3px;background:var(--ember);transition:width .6s;z-index:5;max-width:calc(100% - 68px)}
+#pageno{position:absolute;right:60px;bottom:52px;font:600 18px 'JetBrains Mono';color:var(--dim);z-index:5;transition:opacity .4s}
+#brand{position:absolute;left:60px;bottom:48px;font:700 20px 'Inter';color:var(--mut);z-index:5;display:flex;gap:10px;align-items:center;transition:opacity .4s}
+#brand i{width:12px;height:12px;border-radius:50%;background:var(--ember);box-shadow:0 0 0 5px #E2550F22}
+#hud{position:fixed;right:18px;bottom:18px;display:flex;gap:8px;z-index:20;opacity:.25;transition:opacity .3s}
+#hud:hover{opacity:1}
+#hud button{font:600 13px 'JetBrains Mono';background:#FBF8F2;color:#5F5A52;border:1px solid #E2DACB;border-radius:8px;padding:8px 11px;cursor:pointer}
+#hud button.on{color:#E2550F;border-color:#E2550F88}
+#notes{position:fixed;left:18px;right:18px;bottom:64px;max-width:900px;margin:auto;background:#1C1A17f2;border-radius:14px;padding:18px 22px;font-size:17px;line-height:1.5;color:#EDE7DB;z-index:20;display:none}
+#notes.on{display:block}
+#notes .t{font:700 15px 'JetBrains Mono';display:block;margin-bottom:6px}
+#help{position:fixed;top:14px;left:50%;transform:translateX(-50%);font:500 13px 'JetBrains Mono';color:#9A9387;z-index:20;transition:opacity 1s}
+</style>
+
+</head>
+<body>
+<div id="wrap"><div id="stage">
+<canvas id="bg"></canvas>
+<div id="frame"><div class="ticks"></div><span class="c tl">60°N 120°W</span><span class="c tr">EMBER · FIRE RECORD 2006–2026</span><span class="c bl">49°N 120°W</span><span class="c br">MODIS · VIIRS · FIRMS</span></div>
+
+<!-- ================= 1 · TITLE ================= -->
+<section class="slide tone-ember" id="s1" data-tone="ember" data-notes="~15s. “Hi, we're [TEAM]. This is Ember: twenty years of NASA fire satellites, turned into a record you can actually read. Our challenge was [CHALLENGE].”">
+  <div class="cover">
+    <div class="logo r zoom" style="--d:.1"><span class="satdot"></span>
+      <svg viewBox="0 0 100 100"><defs><linearGradient id="fg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#C8321E"/><stop offset=".6" stop-color="#E2550F"/><stop offset="1" stop-color="#F2A03D"/></linearGradient></defs>
+        <g class="flick"><path d="M50 8C54 26 72 34 72 58a22 22 0 0 1-44 0c0-12 6-18 10-24 1 8 5 12 9 13-3-14 3-27 3-39z" fill="url(#fg)"/><path d="M50 52c3 7 10 9 10 17a10 10 0 0 1-20 0c0-6 5-9 10-17z" fill="#FFE9C7"/></g></svg>
+    </div>
+    <div>
+      <div class="kicker r" style="--d:.3">NASA Space Apps · 2026</div>
+      <h1 class="r title-ember" style="--d:.45">Ember</h1>
+      <div class="for r" style="--d:.55">for fire planners, researchers &amp; reporters</div>
+      <div class="tagline r" style="--d:.65">Every fire NASA has seen, <span>in one record.</span></div>
+      <div class="pill-row r" style="--d:.85">
+        <span class="pill hot" id="challengePill"></span>
+        <span class="pill">MODIS + VIIRS · FIRMS</span><span class="pill">NASA POWER</span>
+      </div>
+      <div class="team r" style="--d:1.05" id="teamRow"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2 · PROBLEM ================= -->
+<section class="slide tone-red" id="s2" data-tone="red" data-notes="~35s. “MODIS has watched fires since 2000 and is retiring around 2026–27. VIIRS started in 2012 and is the future. For the years they overlap, they see the same fires, but VIIRS counts far more, because its pixels are three times sharper. (Point at the gap.) So if you build a long record and switch sensors, fire looks like it jumped when it didn't. (Click Ember.) Our harmonization pipeline, on the right, learns the difference from the overlap years and translates every MODIS year into VIIRS terms. Now the two agree, 2006 to 2011 joins the VIIRS-era record, and a real spike like 2023 stands out.”">
+  <div class="kicker r" style="--d:.1">The problem</div>
+  <h2 class="r" style="--d:.25">VIIRS sees more fire. <em>Is there more fire?</em></h2>
+  <div class="prob">
+    <div class="card chart r" style="--d:.45">
+      <div class="chart-top">
+        <div class="seg" id="seg"><button data-m="raw" class="on" type="button">Raw sensors</button><button data-m="ember" type="button">Ember-harmonized</button></div>
+        <div class="lg"><span><i style="background:#8FB0B6"></i>MODIS</span><span><i style="background:var(--ember)"></i>VIIRS</span><span id="lgE" style="opacity:.35"><i style="background:#F2A06B"></i>MODIS → VIIRS terms</span></div>
+      </div>
+      <svg id="trend" viewBox="0 0 1000 470" aria-label="Sensor timeline and illustrative yearly fire counts"></svg>
+      <div class="callout" id="callout"></div>
+      <div class="src">Sensor dates are real. Bar heights are illustrative, to show the effect.</div>
+    </div>
+    <div class="hz">
+      <div class="hz-h r" style="--d:.55">Our harmonization pipeline</div>
+      <div class="hz-list" id="hz">
+        <div class="hz-line"><i></i></div>
+        <div class="hz-step"><span class="hn">1</span><div><b>Pair up</b><span>Match MODIS + VIIRS fires, same place and day, 2012–2026</span></div></div>
+        <div class="hz-step"><span class="hn">2</span><div><b>Calibrate fire energy</b><span>Learn how MODIS FRP converts to VIIRS FRP</span></div></div>
+        <div class="hz-step"><span class="hn">3</span><div><b>Sharpen</b><span>ML turns 1 km MODIS into 375 m VIIRS-like detail</span></div></div>
+        <div class="hz-step"><span class="hn">4</span><div><b>Translate</b><span>Run every MODIS year, 2006–2026, through it</span></div></div>
+        <div class="hz-step last"><span class="hn">✓</span><div><b>One fair record</b><span>Every year comparable, so real spikes stand out</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3 · WHO IT'S FOR ================= -->
+<section class="slide tone-sat" id="s3" data-tone="sat" data-notes="~30s. “Crews on the fireline ask about today's weather and fire danger. Planners, researchers and reporters ask: how does this season compare to the average? But that average mixes two satellites. So Ember gives them five things: trends, anomalies flagged in plain English, fire-regime patterns, a 7 and 30-day forecast with a range, and it's accessible by design: you can listen to a fire season, use voice commands, and switch to a colour-blind palette. And if you have a question, Ember's built-in chatbot answers it about whatever place and years you're looking at.”">
+  <div class="who">
+    <div>
+      <div class="kicker r" style="--d:.1">Who it's for</div>
+      <h2 class="r" style="--d:.25">“How does this season compare to <em>the average?</em>”</h2>
+      <div class="lead r" style="--d:.4;font-size:28px">Fire planners, researchers and reporters measure every season against the long-term average. But that average mixes <b>two different satellites</b>, so it's off.</div>
+      <div class="feats-h r" style="--d:.55">What you can do in Ember</div>
+      <div class="feats">
+        <div class="ft r" style="--d:.6"><div class="fi">📈</div><b>Trends</b><span>How fire changed, year by year and month by month</span></div>
+        <div class="ft r" style="--d:.7"><div class="fi">⚑</div><b>Anomalies</b><span>The months that were far from normal, in plain English</span></div>
+        <div class="ft r" style="--d:.8"><div class="fi">🗺️</div><b>Patterns</b><span>Fire regimes: when, how often and how hot places burn</span></div>
+        <div class="ft r" style="--d:.9"><div class="fi">🔮</div><b>Forecast</b><span>Expected fires for the next 7 and 30 days, with a range</span></div>
+        <div class="ft wide r" style="--d:1"><div class="fi">♿</div><b>Accessible by design</b><span>Listen to the fire season · voice commands · read-aloud · colour-blind palette</span></div>
+      </div>
+    </div>
+    <div class="phone r zoom" style="--d:.3">
+      <div class="ph-top"><div class="ph-av" style="background:var(--ember)">ST</div><div><b>Syntax Terror</b><span>Ember team</span></div></div>
+      <div class="chat" id="chat">
+        <div class="msg out">Hey, quick question for our season report. How does this year compare to the average?</div>
+        <div class="msg in">Hmm, careful with that average. The older years come from MODIS and the newer ones from VIIRS.</div>
+        <div class="msg out">Does that matter?</div>
+        <div class="msg in">Yeah, VIIRS picks up way more small fires. So recent years look worse than they really are.</div>
+        <div class="msg out">Oh no 😬 So what do I do?</div>
+        <div class="msg in sys">Use <b>Ember</b>. It puts every year on the same scale, then flags a season if it's way above normal <span class="flag">⚑ Anomaly</span></div>
+        <div class="typing"><i></i><i></i><i></i></div>
+      </div>
+      <div class="bot-note"><span class="bot-ic">💬</span><div><b>Built-in AI chatbot</b><span>Ask Ember about the place and years on your screen, in your own words</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4 · PROCESS + MODELS ================= -->
+<section class="slide tone-sat" id="s4" data-tone="sat" data-notes="~35s. “Four steps: collect every hotspot from NASA FIRMS, clean out bad detections, harmonize MODIS into VIIRS terms, and serve it in Ember. Under the hood: FRP harmonization calibrates fire energy between sensors. Our spatial ML sharpens 1 km MODIS toward 375 m: we tested a Random Forest and a CNN, plus a U-Net generator trained with a conditional-GAN discriminator. Fire regimes come from K-Means and HDBSCAN clustering. The 7 and 30-day forecast is XGBoost with NASA POWER weather. Everything else, anomalies, trends and sound, is plain algorithms and logic. Plus a Gemini chatbot and accessibility built in. Everything in colour is what makes Ember unique.”">
+  <div class="kicker r" style="--d:.1">How it works</div>
+  <h2 class="r" style="--d:.2">From raw hotspots to <em>one fair record</em>.</h2>
+  <div class="hpipe" id="pipe">
+    <div class="pipe-line"><i></i></div>
+    <div class="step"><div class="step-n">01</div><b>Collect</b><span>MODIS + VIIRS hotspots from NASA FIRMS</span></div>
+    <div class="step"><div class="step-n">02</div><b>Clean</b><span>Drop low-confidence, gas flares, volcanoes</span></div>
+    <div class="step"><div class="step-n">03</div><b>Harmonize</b><span>MODIS → VIIRS terms</span></div>
+    <div class="step"><div class="step-n">04</div><b>Ember</b><span>Map, anomalies, patterns, forecast, sound</span></div>
+  </div>
+  <div class="uh-h r" style="--d:1.1">Under the hood</div>
+  <div class="mods">
+    <div class="mod r" style="--d:1.2"><div class="mt">⚡ FRP harmonization</div><p>Matches fire energy between the two sensors</p><div class="chips"><i>Overlap matching</i><i>Regression</i><i>2° grid</i></div></div>
+    <div class="mod usp-c r" style="--c:#0E6E7E;--d:1.28"><span class="usp-tag">★ Our USP</span><div class="mt">🛰️ Spatial ML</div><p>Sharpens 1 km MODIS toward 375 m. Predictable over regions, uncertain pixel by pixel.</p><div class="chips"><i>Random Forest</i><i>CNN</i><i>U-Net generator</i><i>cGAN discriminator</i></div></div>
+    <div class="mod usp-c r" style="--c:#C27C00;--d:1.36"><span class="usp-tag">★ Our USP</span><div class="mt">🗺️ Fire regimes</div><p>Groups places by when, how often and how hot they burn, revealing summer wildfire, crop burning, year-round and high-intensity fire.</p><div class="chips"><i>K-Means</i><i>HDBSCAN</i></div></div>
+    <div class="mod usp-c r" style="--c:#3C6FB0;--d:1.44"><span class="usp-tag">★ Our USP</span><div class="mt">🔮 7 / 30-day forecast</div><p>Expected fires with a 5–95% range</p><div class="chips"><i>XGBoost</i><i>Quantiles</i><i>NASA POWER</i></div></div>
+    <div class="mod usp-c r" style="--c:#2E8B57;--d:1.52"><span class="usp-tag">★ Our USP</span><div class="mt">⚙️ Algorithms &amp; logic</div><p>Anomalies, trends and sound, no ML needed</p><div class="chips"><i>Rolling baseline</i><i>Trends</i><i>Web Audio</i></div></div>
+    <div class="mod usp-c r" style="--c:#E2550F;--d:1.6"><span class="usp-tag">★ Our USP</span><div class="mt">💬 AI chatbot</div><p>Answers questions about the place and years on screen</p><div class="chips"><i>Gemini</i><i>Screen summary</i></div></div>
+    <div class="mod usp-c r" style="--c:#7A4E9E;--d:1.68"><span class="usp-tag">★ Our USP</span><div class="mt">♿ Accessible by design</div><p>Use Ember without seeing the chart</p><div class="chips"><i>Sonification</i><i>Voice commands</i><i>Read-aloud</i><i>Colour-blind palette</i></div></div>
+  </div>
+  <div class="bottom2 r" style="--d:1.8">
+    <div><span class="b2h">NASA data</span><i>FIRMS MODIS C6.1</i><i>FIRMS VIIRS S-NPP</i><i>NASA POWER</i><i>MODIS 7-2-1 imagery</i></div>
+    <div><span class="b2h" style="color:var(--ember)">Future</span><i class="f">Next VIIRS satellites</i><i class="f">Smoke &amp; air quality</i><i class="f">Agency dashboards</i><i class="f">Burn recovery</i></div>
+  </div>
+</section>
+
+<!-- ================= 5 · LIVE DEMO ================= -->
+<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Press L to load the live app (or drop a screen recording). Path: 1) Home: search “Northern Alberta” · 2) Fire Map: the fires light up · 3) Anomalies: 2023 flagged as far from normal · 4) Patterns: fire regimes · 5) Listen: play the season · 6) Trends: year by year. Say what the user learns at each click, not what the button does.">
+  <div class="demo">
+    <div class="vhead"><div><div class="kicker r" style="--d:.05">Live demo</div><h2 class="r" style="--d:.15">How does <em>Ember</em> work?</h2></div><small class="r" style="--d:.3">Better if we show you →</small></div>
+    <div class="screen r" style="--d:.35">
+      <div class="bar"><i></i><i></i><i></i><div class="url" id="urlBar">ember</div><div class="live-tag">LIVE</div></div>
+      <div class="view" id="view">
+        <label class="drop" id="drop">
+          <svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#0E6E7E" stroke-width="1.6"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+          <b>Load the live app, or drop a screenshot / screen recording</b>
+          <span style="font-size:21px">Press <span class="mono">L</span> · click · or drag a file here</span>
+          <span style="display:flex;gap:12px"><button class="btn" id="loadApp" type="button">Load live app</button><a class="btn ghost" id="openApp" target="_blank" rel="noopener" href="#">Open in new tab</a></span>
+          <input type="file" id="file" accept="image/*,video/*" hidden>
+        </label>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6 · WHAT MAKES IT DIFFERENT ================= -->
+<section class="slide tone-gold" id="s6" data-tone="gold" data-notes="~40s. Drag the slider while you talk. “This is Ember's core: left is how MODIS sees a fire, in 1 km blocks. Right is the same fire after Ember translates it into VIIRS terms, 375 m. And we're honest about the science: the two sensors agree well over whole regions, so regional trends are trustworthy. Pixel by pixel it's still hard: our sharpening scores 0.60, where 0.5 is a coin flip, because MODIS's location error is about one VIIRS pixel. (Click play.) And this is the season as sound, for people who can't see the chart.”">
+  <div class="kicker r" style="--d:.1">What makes Ember different</div>
+  <h2 class="r" style="--d:.2">Fair history. Honest limits. <em>For everyone.</em></h2>
+  <div class="usp-grid">
+    <div class="ba-wrap r" style="--d:.35">
+      <div class="ba" id="ba">
+        <canvas id="baRaw" width="1640" height="470"></canvas>
+        <canvas id="baEmb" width="1640" height="470"></canvas>
+        <div class="ba-lab l">MODIS · 1 km</div><div class="ba-lab r2">EMBER · 375 m</div>
+        <div class="ba-handle" id="baH"><i>◀ ▶</i></div>
+      </div>
+      <div class="src" style="margin-top:8px">Same illustrative fire at each resolution · drag to compare</div>
+    </div>
+    </div>
+  <div class="trio">
+    <div class="card tc r" style="--d:1">
+      <div class="ftag" style="color:var(--sat)">Predictable · over regions</div>
+      <div class="cmp">
+        <div class="cmp-row"><span>Region (2° area)</span><div class="cmp-t"><i data-w="100" style="background:var(--sat)"></i></div><b style="color:var(--sat)">agrees</b></div>
+        <div class="cmp-row"><span>Single pixel</span><div class="cmp-t"><i data-w="15" style="background:#B9AE9B"></i></div><b style="color:var(--dim)">weak</b></div>
+      </div>
+      <div class="why">MODIS and VIIRS fire energy line up well once you look at whole regions, so regional trends are trustworthy.</div>
+    </div>
+    <div class="card tc r" style="--d:1.12">
+      <div class="ftag" style="color:var(--flame)">Uncertain · pixel by pixel</div>
+      <div class="tc-row"><span class="pv" style="color:var(--flame)"><span data-count="0.60" data-dec="2">0</span></span><span class="pl">sharpening score<br><small>0.5 = coin flip · 1.0 = perfect</small></span></div>
+      <div class="why">MODIS's location error is about the size of a VIIRS pixel, so exact 375 m placement is still the hard part.</div>
+    </div>
+    <div class="card tc hear r" style="--d:1.24">
+      <div class="ftag" style="color:var(--gold)">Hear the season</div>
+      <div class="tc-row"><button id="playB" type="button" aria-label="Play the fire season as sound"><svg id="playIco" width="24" height="24" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="#fff"/></svg></button><canvas id="waveC" width="440" height="110"></canvas></div>
+      <div class="why"><b>Why sound?</b> Charts are invisible to blind and low-vision users. Calm hum = normal month · crackle + higher pitch = fire far above average. <span id="sndMsg"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 7 · CLOSE + IMPACT ================= -->
+<section class="slide tone-ember" id="s7" data-tone="ember" data-notes="~20s. “MODIS is retiring in the next year. Without a bridge, two decades of fire history stop being comparable with everything we see next. Ember is that bridge: fire agencies get a fair baseline, researchers get a clean trend, and anyone can see and hear the fire history of where they live. VIIRS is the future. Ember brings the past with it. Thank you.”">
+  <div class="end">
+    <div>
+      <div class="kicker r" style="--d:.1">Why it matters</div>
+      <h1 class="r" style="--d:.3">VIIRS is the future.<br><em>Ember brings<br>the past with it.</em></h1>
+      <div class="impact">
+        <div class="r" style="--d:.7"><b>Fire planners</b>keep a fair 20-year baseline as MODIS retires</div>
+        <div class="r" style="--d:.85"><b>Researchers</b>get one clean trend with no fake sensor jump</div>
+        <div class="r" style="--d:1"><b>Everyone</b>can see and hear the fire history of where they live</div>
+      </div>
+    </div>
+    <div class="qr r zoom" style="--d:1.1" id="qr"><img src="data:image/png;base64,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" alt="QR code to https://imkrishpatel.github.io/Syntax-TERROR/"></div>
+  </div>
+</section>
+
+<div id="progress"></div>
+<div id="brand"><i></i>Ember</div>
+<div id="pageno">01 / 07</div>
+</div></div>
+
+<div id="hud">
+  <button id="prevB">◀</button><button id="nextB">▶</button>
+  <button id="autoB" title="Auto-play for judges viewing alone (A)">AUTO</button>
+  <button id="ntB" title="Speaker notes (N)">NOTES</button>
+  <button id="fsB" title="Fullscreen (F)">⛶</button>
+  <button id="hudN">1/7</button>
+</div>
+<div id="notes"></div>
+<div id="help">← → navigate · N notes · A auto-play · F fullscreen · R replay · L load app · P play sound</div>
+
+<script>
+/* ===================== CONFIG: EDIT THESE ===================== */
+const CONFIG = {
+  team: "Syntax Terror",
+  challenge: "Harmonization of MODIS and VIIRS Hot Spots",
+  appUrl: "https://imkrishpatel.github.io/Syntax-TERROR/",            // e.g. "https://your-team.github.io/ember/"  (used for the live demo + QR code)
+  members: [
+    {name:"Pearl",   role:"Fire regime clustering"},
+    {name:"Snavya",  role:"FIRMS data + forecast"},
+    {name:"Shriya",  role:"FRP calibration"},
+    {name:"Aashana", role:"MODIS→VIIRS super-resolution"},
+    {name:"Mridul",  role:"Sonification"},
+    {name:"Krish",   role:"[ROLE]"},
+  ],
+  // Official challenge video. Set start/end (seconds) to the clip you want to play on slide 2.
+  problemVideo: { id:"tEPHsiZtuvk", start:0, end:0 },  // end:0 = play to the end
+  talkSeconds: 300,      // talk clock limit in notes
+  autoSeconds: [8,16,12,12,14,16,10], // per-slide time in auto-play
+};
+/* ============================================================== */
+(() => {
+  const stage = document.getElementById('stage');
+  const slides = [...document.querySelectorAll('.slide')];
+  const avColors = ['#E2550F','#0E6E7E','#B7791F','#2E8B57','#7A4E9E','#3C6FB0'];
+  let cur = 0;
+
+  /* ---- fill config ---- */
+  document.getElementById('challengePill').textContent = 'Challenge: ' + CONFIG.challenge;
+  document.getElementById('teamRow').innerHTML = `<div><b>${CONFIG.team}</b>${CONFIG.members.map(m=>m.name).join(' · ')}</div>`;
+  const memEl = document.getElementById('members'); if (memEl) memEl.innerHTML = CONFIG.members.map((m,i)=>
+    `<div class="member"><div class="av" style="background:${avColors[i%6]}">${m.name[0]}</div><div><b>${m.name}</b><span>${m.role}</span></div></div>`).join('');
+  slides.forEach(s => s.dataset.notes = (s.dataset.notes||'').replaceAll('[TEAM]',CONFIG.team).replaceAll('[CHALLENGE]',CONFIG.challenge));
+  const openA = document.getElementById('openApp');
+  if (CONFIG.appUrl){ openA.href = CONFIG.appUrl; document.getElementById('urlBar').textContent = CONFIG.appUrl.replace(/^https?:\/\//,''); } else openA.style.display='none';
+
+  /* ---- fit 1920x1080 ---- */
+  function fit(){ stage.style.transform = `translate(-50%,-50%) scale(${Math.min(innerWidth/1920, innerHeight/1080)})`; }
+  addEventListener('resize', fit); fit();
+
+  /* ---- count-up ---- */
+  function countUp(el, delay){
+    const to = parseFloat(el.dataset.count), dec = +(el.dataset.dec||0), dur = 1600;
+    el.textContent = (0).toFixed(dec);
+    later(() => { const t0 = performance.now();
+      const step = now => { const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,4);
+        el.textContent = (to*e).toFixed(dec); if (p<1) requestAnimationFrame(step); };
+      requestAnimationFrame(step); }, delay);
+  }
+  const timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const clearTimers = () => { while (timers.length) clearTimeout(timers.pop()); };
+
+  function enter(s){
+    s.querySelectorAll('[data-count]').forEach(el => {
+      const host = el.closest('.r'); const d = host ? parseFloat(host.style.getPropertyValue('--d')||0)*1000 : 0;
+      countUp(el, d + 350);
+    });
+    s.querySelectorAll('.meter i,.hb .t i,.cmp-t i').forEach(i => { i.style.width = 0; later(() => i.style.width = i.dataset.w + '%', 900); });
+    if (s.id === 's2') runTrend();
+    if (s.id === 's3') runChat();
+    if (s.id === 's4') runPipe();
+    if (s.id === 's6') runBA();
+  }
+  function leave(s){ if (s.id === 's6') stopSound(); }
+
+  function go(n){
+    n = Math.max(0, Math.min(slides.length-1, n));
+    clearTimers();
+    if (slides[cur]) leave(slides[cur]);
+    slides.forEach((s,i) => s.classList.toggle('active', i===n));
+    cur = n; enter(slides[n]);
+    document.getElementById('progress').style.width = (n/(slides.length-1))*100 + '%';
+    document.getElementById('pageno').textContent = String(n+1).padStart(2,'0') + ' / ' + String(slides.length).padStart(2,'0');
+    document.getElementById('hudN').textContent = (n+1) + '/' + slides.length;
+    document.getElementById('brand').style.opacity = (n===0||n===slides.length-1) ? 0 : 1;
+    document.getElementById('pageno').style.opacity = n===0 ? 0 : 1;
+    tone = slides[n].dataset.tone || 'ember';
+    renderNotes();
+    try { history.replaceState(null,'','#s'+(n+1)); } catch(e){}
+    if (auto) scheduleAuto();
+  }
+
+  /* ---- notes + talk clock ---- */
+  const notesEl = document.getElementById('notes');
+  let clockStart = null;
+  function renderNotes(){ notesEl.innerHTML = '<span class="t" id="clock"></span>' + (slides[cur].dataset.notes||''); tickClock(); }
+  function tickClock(){ const c = document.getElementById('clock'); if (!c) return;
+    const L = CONFIG.talkSeconds, fm = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+    if (!clockStart){ c.textContent = `${fm(L)} talk · starts on next slide`; c.style.color='#B8B0A2'; return; }
+    const s = Math.floor((Date.now()-clockStart)/1000); c.textContent = `${fm(s)} / ${fm(L)}`;
+    c.style.color = s > L ? '#FF4D2E' : s > L*0.9 ? '#FFC24A' : '#5FD38D'; }
+  setInterval(tickClock, 1000);
+
+  /* ---- auto-play (for judges viewing on their own) ---- */
+  let auto = false, autoT = null;
+  function scheduleAuto(){ clearTimeout(autoT); if (!auto) return;
+    autoT = setTimeout(() => { if (cur < slides.length-1) go(cur+1); else toggleAuto(false); }, (CONFIG.autoSeconds[cur]||10)*1000); }
+  function toggleAuto(v){ auto = v ?? !auto; document.getElementById('autoB').classList.toggle('on', auto); if (auto) scheduleAuto(); else clearTimeout(autoT); }
+
+  /* ---- keys / buttons ---- */
+  const next = () => { if (!clockStart) clockStart = Date.now(); go(cur+1); };
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    const k = e.key;
+    if (['ArrowRight','PageDown',' ','Enter'].includes(k)) { e.preventDefault(); next(); }
+    else if (['ArrowLeft','PageUp','Backspace'].includes(k)) { e.preventDefault(); go(cur-1); }
+    else if (k==='Home') go(0); else if (k==='End') go(slides.length-1);
+    else if (/^[1-7]$/.test(k)) go(+k-1);
+    else if (k==='f'||k==='F') toggleFS();
+    else if (k==='n'||k==='N') notesEl.classList.toggle('on');
+    else if (k==='a'||k==='A') toggleAuto();
+    else if ((k==='l'||k==='L') && slides[cur].id==='s5') loadApp();
+    else if ((k==='p'||k==='P') && slides[cur].id==='s6') toggleSound();
+    else if (k==='r'||k==='R') { const s = slides[cur]; s.classList.remove('active'); void s.offsetWidth; s.classList.add('active'); clearTimers(); enter(s); }
+  });
+  document.getElementById('prevB').onclick = () => go(cur-1);
+  document.getElementById('nextB').onclick = next;
+  document.getElementById('fsB').onclick = toggleFS;
+  document.getElementById('ntB').onclick = () => notesEl.classList.toggle('on');
+  document.getElementById('autoB').onclick = () => toggleAuto();
+  function toggleFS(){ try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(()=>{}); } catch(e){} }
+  stage.addEventListener('click', e => { if (e.target.closest('button,a,label,input,.seg,.screen,.ba')) return; next(); });
+  setTimeout(()=>document.getElementById('help').style.opacity=0, 6000);
+
+  /* ---- s3 pipeline ---- */
+  function runPipe(){
+    const steps = [...document.querySelectorAll('#pipe .step')], fill = document.querySelector('#pipe .pipe-line i');
+    steps.forEach(s=>s.classList.remove('on')); fill.style.width = 0;
+    steps.forEach((s,i) => later(() => { s.classList.add('on'); fill.style.width = (i/(steps.length-1))*100 + '%'; }, 900 + i*650));
+  }
+
+  /* ---- s5 demo ---- */
+  const view = document.getElementById('view'), drop = document.getElementById('drop'), file = document.getElementById('file');
+  function loadApp(){
+    if (!CONFIG.appUrl){ file.click(); return; }
+    view.innerHTML = `<iframe src="${CONFIG.appUrl}" allow="fullscreen; autoplay"></iframe>`;
+  }
+  document.getElementById('loadApp').onclick = e => { e.preventDefault(); e.stopPropagation(); loadApp(); };
+  openA.onclick = e => e.stopPropagation();
+  function showFile(f){ if (!f) return; const u = URL.createObjectURL(f);
+    view.innerHTML = f.type.startsWith('video') ? `<video src="${u}" controls autoplay muted loop></video>` : `<img src="${u}" alt="Ember app">`; }
+  file.onchange = () => showFile(file.files[0]);
+  ['dragover','dragenter'].forEach(ev => view.addEventListener(ev, e => { e.preventDefault(); drop.classList?.add('over'); }));
+  view.addEventListener('dragleave', () => drop.classList?.remove('over'));
+  view.addEventListener('drop', e => { e.preventDefault(); showFile(e.dataTransfer.files[0]); });
+
+  /* ---- s3 chat ---- */
+  function runChat(){ const msgs=[...document.querySelectorAll('#chat .msg')], ty=document.querySelector('#chat .typing');
+    msgs.forEach(m=>m.classList.remove('show')); ty.classList.remove('show');
+    msgs.forEach((m,i)=>{ later(()=>{ ty.classList.add('show'); }, 700+i*1300); later(()=>{ ty.classList.remove('show'); m.classList.add('show'); }, 1300+i*1300); }); }
+
+  /* ---- s6 before/after slider (illustrative fire drawn at two resolutions) ---- */
+  const ba = document.getElementById('ba'), baE = document.getElementById('baEmb'), baH = document.getElementById('baH');
+  (function drawBA(){ const CH=470;
+    let sd = 5; const rr = () => (sd = (sd*16807)%2147483647)/2147483647;
+    const g = () => { let u=0; for(let k=0;k<6;k++) u+=rr(); return u-3; };
+    const blobs = [[430,240,120,70,1000],[860,200,170,80,1500],[1220,290,100,55,650],[620,350,70,40,350],[1430,140,60,40,220]];
+    const pts = []; blobs.forEach(([x,y,sx,sy,n])=>{ for(let i=0;i<n;i++) pts.push([x+g()*sx/1.6, y+g()*sy/1.6, rr()]); });
+    function grid(ctx, cell, palette){
+      ctx.fillStyle='#F1EADD'; ctx.fillRect(0,0,1640,CH);
+      ctx.strokeStyle='rgba(150,130,100,.12)'; ctx.lineWidth=1;
+      for(let x=0;x<1640;x+=cell){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+      for(let y=0;y<CH;y+=cell){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1640,y);ctx.stroke();}
+      const m = new Map(); pts.forEach(([x,y,w])=>{ const k=Math.floor(x/cell)+','+Math.floor(y/cell); m.set(k,(m.get(k)||0)+.6+w); });
+      const mx = Math.max(...m.values());
+      m.forEach((v,k)=>{ const [i,j]=k.split(',').map(Number), t=Math.min(1,Math.pow(v/mx,.55)); ctx.fillStyle=palette(t); ctx.fillRect(i*cell+1,j*cell+1,cell-2,cell-2); });
+    }
+    const lerp=(a,b,t)=>Math.round(a+(b-a)*t);
+    grid(document.getElementById('baRaw').getContext('2d'), 72, t=>`rgba(${lerp(170,94,t)},${lerp(196,138,t)},${lerp(200,146,t)},${.35+.6*t})`);
+    grid(baE.getContext('2d'), 27, t=>`rgba(${lerp(242,200,t)},${lerp(170,50,t)},${lerp(110,30,t)},${.3+.7*t})`);
+  })();
+  function setBA(f){ f=Math.max(.03,Math.min(.97,f)); baE.style.clipPath=`inset(0 0 0 ${f*100}%)`; baH.style.left=(f*100)+'%'; }
+  let dragging=false;
+  const baPos = e => { const r=ba.getBoundingClientRect(); setBA((e.clientX-r.left)/r.width); };
+  ba.addEventListener('pointerdown', e=>{ e.stopPropagation(); dragging=true; clearTimers(); ba.setPointerCapture(e.pointerId); baPos(e); });
+  ba.addEventListener('pointermove', e=>{ if(dragging) baPos(e); });
+  ba.addEventListener('pointerup', ()=> dragging=false);
+  ba.addEventListener('click', e=> e.stopPropagation());
+  function runBA(){ setBA(.92); const t0=performance.now()+900;
+    const step=now=>{ if(dragging||!slides[cur]||slides[cur].id!=='s6') return; const p=(now-t0)/2600;
+      if(p<0){requestAnimationFrame(step);return;} const e=p<1?(1-Math.cos(Math.PI*Math.min(1,p)))/2:1; setBA(.92-.84*e*(p<1?1:1)); 
+      if(p<1) requestAnimationFrame(step); else later(()=>{ const t1=performance.now(); const back=n=>{ if(dragging) return; const q=Math.min(1,(n-t1)/1400); setBA(.08+.42*(1-Math.cos(Math.PI*q))/2); if(q<1) requestAnimationFrame(back); }; requestAnimationFrame(back); },400); };
+    requestAnimationFrame(step); }
+
+  /* ---- s6 sonification (illustrative) ---- */
+  const season = [2,3,5,9,16,30,62,95,58,22,8,3]; // illustrative monthly activity shape
+  const base   = [2,3,5,10,18,28,35,30,22,12,6,3]; // illustrative baseline
+  const wc = document.getElementById('waveC'), wx = wc.getContext('2d');
+  let actx = null, playing = false, playHead = -1, sndNodes = [];
+  function drawWave(){
+    const W = wc.width, H = wc.height, mx = 100; wx.clearRect(0,0,W,H);
+    const X = i => 10 + i*(W-20)/11, Y = v => H-10 - v/mx*(H-22);
+    wx.strokeStyle='#B9AE9B'; wx.lineWidth=3; wx.setLineDash([6,6]); wx.beginPath(); base.forEach((v,i)=>i?wx.lineTo(X(i),Y(v)):wx.moveTo(X(i),Y(v))); wx.stroke(); wx.setLineDash([]);
+    wx.lineWidth=4; season.forEach((v,i)=>{ if(!i) return; wx.strokeStyle = (playHead<0||i<=playHead) ? (v>base[i]*1.5?'#C8321E':'#E2550F') : '#E2DACB';
+      wx.beginPath(); wx.moveTo(X(i-1),Y(season[i-1])); wx.lineTo(X(i),Y(v)); wx.stroke(); });
+    if (playHead>=0){ wx.fillStyle='#C8321E'; wx.beginPath(); wx.arc(X(playHead),Y(season[playHead]),8,0,7); wx.fill(); }
+    if (H>120) { wx.fillStyle='#9A9387'; wx.font='14px JetBrains Mono'; 'JFMAMJJASOND'.split('').forEach((m,i)=>wx.fillText(m,X(i)-4,H-0)); }
+  }
+  drawWave();
+  function stopSound(){ playing=false; sndNodes.forEach(n=>{try{n.stop()}catch(e){}}); sndNodes=[]; playHead=-1; drawWave(); const b=document.getElementById('playB'); if(b){ b.classList.remove('on'); document.getElementById('playIco').innerHTML='<path d="M7 4l13 8-13 8z" fill="#fff"/>'; } }
+  async function toggleSound(){
+    const btn=document.getElementById('playB'), msg=document.getElementById('sndMsg');
+    if (playing){ stopSound(); return; }
+    try { actx = actx || new (window.AudioContext||window.webkitAudioContext)(); await actx.resume(); }
+    catch(e){ msg.textContent=' Sound is blocked here: open the deck in its own tab.'; return; }
+    if (actx.state!=='running'){ msg.textContent=' Sound is blocked here: open the deck in its own tab.'; return; }
+    msg.textContent=''; playing = true; btn.classList.add('on');
+    document.getElementById('playIco').innerHTML='<rect x="6" y="5" width="4" height="14" fill="#fff"/><rect x="14" y="5" width="4" height="14" fill="#fff"/>';
+    const master = actx.createGain(); master.gain.value = .9; master.connect(actx.destination);
+    const t0 = actx.currentTime + .08, step = .6;
+    const hum = actx.createOscillator(), hg = actx.createGain(); hum.type='sine'; hum.frequency.value=110; hg.gain.value=.12;
+    hum.connect(hg).connect(master); hum.start(t0); hum.stop(t0+step*12); sndNodes.push(hum);
+    season.forEach((v,i)=>{
+      const t = t0 + i*step, o = actx.createOscillator(), g = actx.createGain();
+      o.type='triangle'; o.frequency.value = 180 + v*7; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(.25,t+.04); g.gain.exponentialRampToValueAtTime(.001,t+step*.95);
+      o.connect(g).connect(master); o.start(t); o.stop(t+step); sndNodes.push(o);
+      const over = v/base[i]; if (over>1.4){
+        const len = Math.floor(actx.sampleRate*step), buf = actx.createBuffer(1,len,actx.sampleRate), d = buf.getChannelData(0);
+        for (let j=0;j<len;j++) d[j] = Math.random()<0.006*over ? (Math.random()*2-1)*(1-j/len) : 0;
+        const n = actx.createBufferSource(), ng = actx.createGain(); n.buffer = buf; ng.gain.value = .9;
+        n.connect(ng).connect(master); n.start(t); sndNodes.push(n); }
+      setTimeout(()=>{ if(playing){ playHead=i; drawWave(); } }, Math.max(0,(t-actx.currentTime)*1000));
+    });
+    setTimeout(()=>{ if (playing) stopSound(); }, step*12*1000+300);
+  }
+  document.getElementById('playB').onclick = e => { e.stopPropagation(); toggleSound(); };
+
+  /* ---- s2 sensor timeline + grouped bars (dates real, heights illustrative) ---- */
+  const years = [...Array(21)].map((_,i)=>2006+i), K = 2.6, VSTART = 2012;
+  const truth = [104,88,110,92,101,118,95,107,112,99,121,108,115,103,124,113,119,262,131,122,127]; // shape only
+  const tsvg = document.getElementById('trend'), call = document.getElementById('callout'), mBars = [], vBars = [];
+  const TX0 = 40, TW = 960, Y0 = 2004, Y1 = 2029, tX = y => TX0 + (y-Y0)/(Y1-Y0)*TW, BASE = 440;
+  (function buildTrend(){
+    const NS='http://www.w3.org/2000/svg', el=(t,a)=>{const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); return e;};
+    // sensor lanes
+    tsvg.appendChild(el('text',{x:TX0,y:20,'font-size':15,'font-family':'JetBrains Mono',fill:'#5E8A92','font-weight':700})).textContent='MODIS · Terra 2000 / Aqua 2002';
+    tsvg.appendChild(el('rect',{x:TX0,y:28,width:tX(2026.7)-TX0,height:16,rx:8,fill:'#8FB0B6'}));
+    tsvg.appendChild(el('rect',{x:tX(2026.7)-2,y:28,width:tX(2027.6)-tX(2026.7),height:16,rx:8,fill:'url(#fadeM)'}));
+    tsvg.insertAdjacentHTML('afterbegin','<defs><linearGradient id="fadeM"><stop offset="0" stop-color="#8FB0B6"/><stop offset="1" stop-color="#8FB0B6" stop-opacity="0"/></linearGradient></defs>');
+    tsvg.appendChild(el('text',{x:tX(2026.9),y:20,'font-size':15,'font-family':'JetBrains Mono',fill:'#C8321E','font-weight':700,'text-anchor':'middle'})).textContent='retiring 2026–27';
+    tsvg.appendChild(el('text',{x:tX(VSTART),y:68,'font-size':15,'font-family':'JetBrains Mono',fill:'#E2550F','font-weight':700})).textContent='VIIRS · S-NPP 2012 → NOAA-20, -21';
+    tsvg.appendChild(el('rect',{x:tX(VSTART),y:76,width:tX(2028.6)-tX(VSTART),height:16,rx:8,fill:'#E2550F'}));
+    tsvg.appendChild(el('path',{d:`M${tX(2028.6)} 76 l14 8 -14 8z`,fill:'#E2550F'}));
+    tsvg.appendChild(el('rect',{id:'ovl',x:tX(VSTART),y:100,width:tX(2026.5)-tX(VSTART),height:BASE-100,fill:'#0E6E7E0d',rx:6}));
+    tsvg.appendChild(el('text',{x:tX(VSTART)+10,y:122,'font-size':15,'font-family':'JetBrains Mono',fill:'#0E6E7E'})).textContent='overlap: both satellites see the same fires';
+    tsvg.appendChild(el('line',{x1:TX0,y1:BASE,x2:TX0+TW,y2:BASE,stroke:'#D9CFBC','stroke-width':2}));
+    const bw = (tX(2007)-tX(2006));
+    years.forEach((y,i)=>{
+      const x = tX(y)-bw*.42;
+      const m = el('rect',{x, width:bw*.4, y:BASE, height:0, rx:3, fill:'#8FB0B6'}); tsvg.appendChild(m); mBars.push(m);
+      const v = el('rect',{x:x+bw*.42, width:bw*.4, y:BASE, height:0, rx:3, fill:'#E2550F'}); tsvg.appendChild(v); vBars.push(v);
+      if (y%2===0) tsvg.appendChild(el('text',{x:tX(y)-bw*.01,y:BASE+22,'text-anchor':'middle','font-size':14,'font-family':'JetBrains Mono',fill:'#9A9387'})).textContent=y;
+    });
+    tsvg.appendChild(el('text',{id:'tag23',x:tX(2023),y:0,'text-anchor':'middle','font-size':15,'font-family':'JetBrains Mono','font-weight':700,fill:'#2E8B57',opacity:0})).textContent='2023: real';
+  })();
+  function drawTrend(m){
+    const sc = (BASE-150)/(K*270);
+    document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+    document.getElementById('lgE').style.opacity = m==='ember'?1:.35;
+    years.forEach((y,i)=>{
+      const mv = m==='ember' ? truth[i]*K : truth[i];
+      mBars[i].setAttribute('y', BASE-mv*sc); mBars[i].setAttribute('height', mv*sc); mBars[i].setAttribute('fill', m==='ember'?'#F2A06B':'#8FB0B6');
+      const vv = y>=VSTART ? truth[i]*K : 0;
+      vBars[i].setAttribute('y', BASE-vv*sc); vBars[i].setAttribute('height', vv*sc);
+    });
+    const tag=document.getElementById('tag23'); tag.setAttribute('y', BASE - truth[years.indexOf(2023)]*K*sc - 10); tag.setAttribute('opacity', m==='ember'?1:0);
+    call.innerHTML = m==='raw' ? 'Same fires, same years: VIIRS counts <em>~2.6× more</em>. Switch sensors and fire seems to jump.'
+                               : 'MODIS translated to VIIRS terms: the bars agree, 2006–2011 joins the record, and <b>2023 stands out as truly above average</b>.';
+  }
+  function runHz(){ const st=[...document.querySelectorAll('#hz .hz-step')], ln=document.querySelector('#hz .hz-line i');
+    st.forEach(x=>x.classList.remove('on')); ln.style.height=0;
+    st.forEach((x,i)=> later(()=>{ x.classList.add('on'); ln.style.height=(i/(st.length-1))*100+'%'; }, 5600 + i*550)); }
+  function runTrend(){ mBars.concat(vBars).forEach(r=>{r.setAttribute('y',BASE);r.setAttribute('height',0);}); call.innerHTML='';
+    later(()=>drawTrend('raw'), 700); later(()=>drawTrend('ember'), 5200); runHz(); }
+  document.getElementById('seg').addEventListener('click', e => { const b=e.target.closest('button'); if(!b) return; e.stopPropagation(); drawTrend(b.dataset.m);
+    if (b.dataset.m==='ember') document.querySelectorAll('#hz .hz-step').forEach(x=>x.classList.add('on')), document.querySelector('#hz .hz-line i').style.height='100%'; });
+
+  /* ---- s7 QR: pre-rendered image in the HTML ---- */
+
+  /* ---- background: topographic map + satellite swath that lights up fires ---- */
+  const cv = document.getElementById('bg'), cx = cv.getContext('2d'); cv.width = 1920; cv.height = 1080;
+  let tone = 'ember';
+  const tones = { ember:[226,85,15], red:[200,50,30], sat:[14,110,126], gold:[183,121,31] };
+  // 1) contour lines drawn once (marching squares on a smooth field)
+  const topo = document.createElement('canvas'); topo.width = 1920; topo.height = 1080; const tx = topo.getContext('2d');
+  const F = (x,y) => Math.sin(x/310)+Math.cos(y/260)+.7*Math.sin((x+y)/190)+.5*Math.cos((x-1.6*y)/150)+.35*Math.sin(x/90+Math.cos(y/120));
+  (function contours(){ const S = 16, nx = 1920/S+1, ny = 1080/S+1, v = [];
+    for (let j=0;j<ny;j++){ v[j]=[]; for (let i=0;i<nx;i++) v[j][i]=F(i*S,j*S); }
+    for (let L=-2.6; L<=2.6; L+=.26){
+      const major = Math.abs(Math.round(L/.26)) % 5 === 0;
+      tx.strokeStyle = major ? 'rgba(150,130,100,.30)' : 'rgba(150,130,100,.16)'; tx.lineWidth = major ? 1.6 : 1; tx.beginPath();
+      for (let j=0;j<ny-1;j++) for (let i=0;i<nx-1;i++){
+        const a=v[j][i],b=v[j][i+1],c=v[j+1][i+1],d=v[j+1][i], x=i*S, y=j*S;
+        const k=(a>L)|((b>L)<<1)|((c>L)<<2)|((d>L)<<3); if (!k||k===15) continue;
+        const lerp=(p,q)=>(L-p)/(q-p);
+        const T=[x+S*lerp(a,b),y], R=[x+S,y+S*lerp(b,c)], B=[x+S*lerp(d,c),y+S], Lf=[x,y+S*lerp(a,d)];
+        const segs={1:[Lf,T],2:[T,R],3:[Lf,R],4:[R,B],5:[Lf,T,R,B],6:[T,B],7:[Lf,B],8:[B,Lf],9:[B,T],10:[T,R,B,Lf],11:[B,R],12:[R,Lf],13:[R,T],14:[T,Lf]}[k];
+        for (let q=0;q<segs.length;q+=2){ tx.moveTo(...segs[q]); tx.lineTo(...segs[q+1]); }
+      }
+      tx.stroke();
+    }
+  })();
+  // 2) fire hotspots scattered on the map (more where the field is "high", like hills/forest)
+  let seed2 = 11; const rn = () => (seed2 = (seed2*16807)%2147483647)/2147483647;
+  const fires = []; while (fires.length < 140){ const x = rn()*1920, y = rn()*1080; if (F(x,y) > .4 + rn()*1.2) fires.push({x,y,hit:-99,size:2+rn()*3.5}); }
+  // 3) satellite swath: a tilted band sweeping across, like a polar orbit ground track
+  let t = 0, swathX = -400, col = [...tones.ember];
+  const SW = 230, TILT = .18;
+  (function loop(){
+    t += 1/60; swathX += 3.2; if (swathX > 2400) swathX = -500;
+    const tg = tones[tone]||tones.ember; col = col.map((c,i)=>c+(tg[i]-c)*.05);
+    cx.clearRect(0,0,1920,1080); cx.drawImage(topo,0,0);
+    // swath band
+    cx.save(); cx.translate(swathX,540); cx.rotate(TILT);
+    const g = cx.createLinearGradient(-SW/2,0,SW/2,0);
+    g.addColorStop(0,'rgba(14,110,126,0)'); g.addColorStop(.5,'rgba(14,110,126,.07)'); g.addColorStop(1,'rgba(14,110,126,0)');
+    cx.fillStyle = g; cx.fillRect(-SW/2,-900,SW,1800);
+    cx.strokeStyle='rgba(14,110,126,.28)'; cx.setLineDash([10,12]); cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(-SW/2,-900); cx.lineTo(-SW/2,900); cx.moveTo(SW/2,-900); cx.lineTo(SW/2,900); cx.stroke(); cx.setLineDash([]);
+    cx.restore();
+    // fires: detected when the swath centre passes
+    const c = col.map(Math.round).join(',');
+    for (const f of fires){
+      const dx = (f.x - swathX)*Math.cos(TILT) + (f.y-540)*Math.sin(TILT);
+      if (Math.abs(dx) < 6) f.hit = t;
+      const age = t - f.hit;
+      if (age < 9){
+        const a = Math.max(0, 1 - age/9);
+        if (age < 1.2){ cx.beginPath(); cx.arc(f.x,f.y,f.size+age*26,0,7); cx.strokeStyle=`rgba(${c},${.5*(1-age/1.2)})`; cx.lineWidth=2; cx.stroke(); }
+        cx.beginPath(); cx.arc(f.x,f.y,f.size,0,7); cx.fillStyle=`rgba(${c},${.25+.6*a})`; cx.fill();
+      } else { cx.beginPath(); cx.arc(f.x,f.y,1.6,0,7); cx.fillStyle='rgba(150,130,100,.22)'; cx.fill(); }
+    }
+    requestAnimationFrame(loop);
+  })();
+
+  /* ---- start ---- */
+  const h = parseInt((location.hash||'').replace(/\D/g,''),10);
+  go(h>=1 && h<=slides.length ? h-1 : 0);
+})();
+</script>
+</body>
+</html>
