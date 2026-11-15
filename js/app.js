@@ -759,6 +759,11 @@ async function start() {
   if (!state.hasArea) mapView.showWorld()
   render()
   markSidebar()
+  // a link that opens straight on the map: size the map once the layout has settled
+  if (page === 'map') requestAnimationFrame(() => setTimeout(() => {
+    mapView.refresh()
+    if (state.hasArea) mapView.fitArea(); else mapView.showWorld()
+  }, 60))
   renderForecast(forecast)
   renderValidation(validation)
 
