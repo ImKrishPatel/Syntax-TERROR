@@ -580,7 +580,7 @@ function wireControls() {
     b.onclick = () => {
       const preset = CONFIG.presets.find(p => p.name === b.textContent)
       update({ area: [...(preset ? preset.box : data.bounds)] })
-      showApp()
+      showApp(); mapView.fitArea()
     }
   })
 
@@ -589,7 +589,7 @@ function wireControls() {
     const [s0, w0, n0, e0] = state.area
     const hLat = Math.min(4, Math.max(1.5, (n0 - s0) / 2)), hLon = Math.min(6, Math.max(2, (e0 - w0) / 2))
     update({ area: [place.lat - hLat, place.lon - hLon, place.lat + hLat, place.lon + hLon].map(v => Math.round(v * 10) / 10) })
-    showApp()
+    showApp(); mapView.fitArea()
   }
   wireSearch($('heroSearch'), $('heroResults'), goTo)
   wireSearch($('placeSearch'), $('placeResults'), goTo)
@@ -629,7 +629,7 @@ function wireControls() {
     error.hidden = !problem
     error.textContent = problem
     if (problem) return
-    update({ area: [s, w, n, e] })
+    update({ area: [s, w, n, e] }); mapView.fitArea()
     mapView.fitArea()
     $('areaForm').hidden = true
   }
