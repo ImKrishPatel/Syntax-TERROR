@@ -383,8 +383,8 @@ def audit_firms_archives(
                     unique_dates = valid_dates.unique()
                     dates_seen.update(unique_dates.tolist())
                     if len(unique_dates):
-                        earliest = unique_dates.min()
-                        latest = unique_dates.max()
+                        earliest = min(unique_dates)
+                        latest = max(unique_dates)
                         previous_earliest = archive_report[
                             "earliest_acquisition_date"
                         ]
