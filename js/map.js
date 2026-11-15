@@ -305,7 +305,18 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   function setCells(values, metric, period) {
     cellValues = values; cellMetric = metric; cellPeriod = period
     const v = values[metric]
-    const breaks = fireBreaks(v)
+    // colour classes are ranked against the searched area and its surroundings, not the whole
+    // world, so a searched place always shows where its own fire is (Alberta is not compared with Africa)
+    let local = null
+    if (area) {
+      const [s, w, n, e] = area
+      const padLat = Math.max(4, (n - s)), padLon = Math.max(6, (e - w))
+      local = Array.from(v).filter((value, i) => {
+        const c = data.cells[i]
+        return c.lat >= s - padLat && c.lat <= n + padLat && c.lon >= w - padLon && c.lon <= e + padLon
+      })
+    }
+    const breaks = fireBreaks(local && local.some(x => x > 0) ? local : v)
     paintCells(v, breaks)
     cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
     if (showing === 'hotspots' && !plain) addHeat()
