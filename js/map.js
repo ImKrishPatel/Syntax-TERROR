@@ -196,7 +196,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
       const color = fireColor(v[i], breaks)
       const sat = basemap === 'satellite'
       square.setStyle(color
-        ? { fillColor: color, fillOpacity: sat ? 0.78 : 0.95, opacity: sat ? 0 : 1 }
+        ? { fillColor: color, fillOpacity: sat ? 0.5 : 0.95, opacity: sat ? 0 : 1 }
         : { fillOpacity: 0, opacity: 0 })
     })
     hotspotLegend = { breaks, metric, period }
@@ -229,7 +229,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
   function regimeStyle(f) {
     const p = f.properties
     if (basemap === 'satellite') {
-      return { fillColor: p.color || '#999', fillOpacity: 0.72, color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0 }
+      return { fillColor: p.color || '#999', fillOpacity: 0.55, color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0 }
     }
     return { fillColor: p.color || '#999', fillOpacity: 0.9, color: p.shifted ? INK : LAND, weight: p.shifted ? 1.6 : 1 }
   }
