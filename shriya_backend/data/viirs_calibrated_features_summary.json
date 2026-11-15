@@ -1,0 +1,17 @@
+{
+    "source": "NASA VIIRS real cleaned observations",
+    "calibration_direction": "VIIRS_FRP_to_MODIS_FRP",
+    "calibration_status": "preliminary_temporal_holdout",
+    "intercept": 23.7925246440714,
+    "slope": 1.8719126746211914,
+    "observations_processed": 89698679,
+    "original_viirs_total_frp_mw": 861029576.88,
+    "estimated_modis_equivalent_total_frp_mw": 3745930208.833546,
+    "intensity_counts": {
+        "Low": 0,
+        "Moderate": 76176584,
+        "High": 10497750,
+        "Extreme": 3024345
+    },
+    "output_file": "viirs_calibrated_features_real.csv.gz"
+}
