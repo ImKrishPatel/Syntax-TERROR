@@ -121,6 +121,10 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     pane: 'imagery', maxNativeZoom: 9, bounds: [[-85, -180], [85, 180]], keepBuffer: 1,
     attribution: 'Imagery: NASA GIBS / Worldview, MODIS Terra and Aqua corrected reflectance, bands 7-2-1',
   }).addTo(map)
+  // country borders and place names over the picture (Esri reference layer, free, attribution required)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imageryLabels', maxNativeZoom: 18, attribution: 'Places and borders © Esri',
+  }).addTo(map)
   const vectorBase = L.layerGroup()   // Natural Earth outlines; only used if the tiles can't load
   element.classList.add('is-satellite')
 
