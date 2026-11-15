@@ -27,6 +27,7 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+src/data/
 
 # Documentation build output
 /site
@@ -105,6 +106,6 @@ shriya_backend/data/selected_calibration_dates.csv
 shriya_backend/data/frp_matching_temp/
 .env
 
-# ===================================
-# forecast pipeline data
+# ============================# forecast pipeline data
 src/data/
+=======
