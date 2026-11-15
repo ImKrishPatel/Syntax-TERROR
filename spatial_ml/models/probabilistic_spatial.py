@@ -308,9 +308,10 @@ class ProbabilisticSpatialEnsemble:
         if excluded_ids:
             LOGGER.warning(
                 "Excluded %d sample(s) with no in-grid observed VIIRS point "
-                "evidence: %s",
+                "evidence (first ids: %s%s; all ids are kept in excluded_sample_ids)",
                 len(excluded_ids),
-                ", ".join(excluded_ids),
+                ", ".join(excluded_ids[:5]),
+                ", ..." if len(excluded_ids) > 5 else "",
             )
         if not included:
             raise ValueError(

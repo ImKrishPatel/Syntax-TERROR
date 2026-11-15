@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
+import numpy as np
 import pandas as pd
 from rasterio.enums import Resampling
 
@@ -24,9 +25,11 @@ from spatial_ml.evaluation.comparison import (
 )
 from spatial_ml.evaluation.splitting import create_evaluation_split
 from spatial_ml.features.environmental import (
+    EnvironmentalFeatureSet,
     RasterFeatureSource,
     extract_environmental_features,
 )
+from spatial_ml.features.modis_context import build_modis_context
 from spatial_ml.models import ProbabilisticRandomForest, ProbabilisticSpatialEnsemble
 from spatial_ml.pipeline.overlap import generate_overlap_dataset
 
@@ -47,18 +50,21 @@ def _build_samples(
     pairs: pd.DataFrame,
     candidates: pd.DataFrame,
     environmental_sources: Sequence[RasterFeatureSource],
+    modis: Optional[pd.DataFrame] = None,
 ) -> List[TrainingSample]:
     samples = []
+    grids = {
+        str(pair["modis_id"]): LocalTargetGrid(float(pair["modis_latitude"]), float(pair["modis_longitude"]))
+        for pair in pairs.drop_duplicates("modis_id").to_dict(orient="records")
+    }
+    context = build_modis_context(pairs, modis, grids) if modis is not None else {}
     candidates_by_parent = {
         str(parent_id): group.reset_index(drop=True)
         for parent_id, group in candidates.groupby("modis_id", sort=False)
     }
     for pair in pairs.to_dict(orient="records"):
         parent_id = str(pair["modis_id"])
-        grid = LocalTargetGrid(
-            float(pair["modis_latitude"]),
-            float(pair["modis_longitude"]),
-        )
+        grid = grids[parent_id]
         environmental = None
         if environmental_sources:
             environmental = extract_environmental_features(
@@ -72,6 +78,13 @@ def _build_samples(
                     )
                     else None
                 ),
+            )
+        if parent_id in context:
+            extra = context[parent_id]
+            environmental = extra if environmental is None else EnvironmentalFeatureSet(
+                values=np.concatenate([environmental.values, extra.values], axis=2),
+                feature_names=environmental.feature_names + extra.feature_names,
+                metadata={**environmental.metadata, "modis_context": extra.metadata},
             )
         samples.append(
             build_training_sample(
@@ -99,6 +112,7 @@ def evaluate_local_firms(
     land_cover_path: Optional[str | Path] = None,
     calibration_method: str = "platt",
     random_seed: int = 42,
+    modis_context: bool = True,
 ) -> Dict[str, Path]:
     """Build overlap samples locally, fit both baselines, and save held-out reports."""
     modis_source = Path(modis_path)
@@ -127,7 +141,7 @@ def evaluate_local_firms(
                 resampling=Resampling.nearest,
             )
         )
-    samples = _build_samples(pairs, candidates, environmental_sources)
+    samples = _build_samples(pairs, candidates, environmental_sources, modis if modis_context else None)
     split = create_evaluation_split(
         samples,
         strategy,
@@ -237,6 +251,11 @@ def _parser() -> argparse.ArgumentParser:
         default="platt",
     )
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--no-modis-context",
+        action="store_true",
+        help="Leave out the neighbouring same-overpass MODIS channels",
+    )
     return parser
 
 
@@ -258,6 +277,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             land_cover_path=arguments.land_cover,
             calibration_method=arguments.calibration,
             random_seed=arguments.random_seed,
+            modis_context=not arguments.no_modis_context,
         )
     except (FileNotFoundError, ValueError) as exc:
         parser.error(str(exc))

@@ -1366,6 +1366,26 @@ def _merge_failure_batches(batch_dir: Path, destination: Path) -> None:
     os.replace(temporary, destination)
 
 
+def _first_malformed_row(path):
+    """Return (data_row_index, message) of the first row with too many fields, or None.
+
+    pandas 3's C parser silently drops extra fields instead of raising, so a
+    malformed row would otherwise be read as a valid-looking record.
+    """
+    import csv
+
+    with open(path, newline="", encoding="utf-8", errors="replace") as handle:
+        rows = csv.reader(handle)
+        header = next(rows, None)
+        if header is None:
+            return None
+        width = len(header)
+        for line_number, row in enumerate(rows, start=2):
+            if len(row) > width:
+                return line_number - 2, f"Expected {width} fields in line {line_number}, saw {len(row)}"
+    return None
+
+
 def run_historical_estimation(
     run_config: HistoricalRunConfig,
 ) -> HistoricalRunResult:
@@ -1477,10 +1497,12 @@ def run_historical_estimation(
         row_offset = 0
         reader = None
         try:
+            malformed = _first_malformed_row(run_config.modis_csv)
             reader = pd.read_csv(
                 run_config.modis_csv,
                 dtype=str,
                 chunksize=run_config.batch_size,
+                nrows=malformed[0] if malformed else None,   # rows before the bad line are still used
             )
             for batch_index, raw_batch in enumerate(reader):
                 batch_counts: Counter = Counter()
@@ -1753,6 +1775,8 @@ def run_historical_estimation(
                 counters.update(batch_counts)
                 manifest["batches"] = batch_summaries
                 _atomic_json(manifest_path, manifest)
+            if malformed:
+                raise pd.errors.ParserError(malformed[1])
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
             counters["fatal_input_error_count"] += 1
             data_warnings.append(f"Input CSV could not be fully parsed: {exc}")
