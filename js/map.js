@@ -60,7 +60,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   // -------------------------------------------------------------------------
   const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'
   const SENSORS = ['MODIS_Terra', 'MODIS_Aqua']
-  const DAY_OFFSETS = [-6, -3, 0, 3, 6]
+  const DAY_OFFSETS = [-4, 0, 4]
   let imageryDate = CONFIG.imageryDefaultDate || '2025-08-15'
   const shiftDate = (date, days) => new Date(Date.parse(date) + days * 864e5).toISOString().slice(0, 10)
   const TODAY = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
@@ -277,9 +277,9 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       let k = 0
       while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
       const level = breaks.length > 1 ? k / (breaks.length - 1) : 1
-      if (level < 0.4) return                      // the quietest squares stay clear, so the picture shows
-      const t = (level - 0.4) / 0.6
-      ctx.globalAlpha = Math.pow(t, 1.2) * 0.65 + 0.3
+      if (level < 0.5) return                      // the quietest squares stay clear, so the picture shows
+      const t = (level - 0.5) / 0.5
+      ctx.globalAlpha = Math.pow(t, 1.3) * 0.5 + 0.2
       const color = GLOW[Math.round(t * (GLOW.length - 1))]   // bright fire colours: amber to hot red
       const c = data.cells[i]
       const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
@@ -305,10 +305,21 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   function setCells(values, metric, period) {
     cellValues = values; cellMetric = metric; cellPeriod = period
     const v = values[metric]
-    const breaks = fireBreaks(v)
+    // colour classes are ranked against the searched area and its surroundings, not the whole
+    // world, so a searched place always shows where its own fire is (Alberta is not compared with Africa)
+    let local = null
+    if (area) {
+      const [s, w, n, e] = area
+      const padLat = Math.max(4, (n - s)), padLon = Math.max(6, (e - w))
+      local = Array.from(v).filter((value, i) => {
+        const c = data.cells[i]
+        return c.lat >= s - padLat && c.lat <= n + padLat && c.lon >= w - padLon && c.lon <= e + padLon
+      })
+    }
+    const breaks = fireBreaks(local && local.some(x => x > 0) ? local : v)
     paintCells(v, breaks)
     cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
-    if (showing === 'hotspots') addHeat()
+    if (showing === 'hotspots' && !plain) addHeat()
     hotspotLegend = { breaks, metric, period }
     drawLegend()
   }
@@ -345,8 +356,23 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     }
   }
 
+  // Plain globe: before a place is chosen the map shows only the satellite picture
+  let plain = false
+  function setPlain(next) {
+    if (next === plain) return
+    plain = next
+    element.classList.toggle('is-plain', plain)
+    for (const layer of [shade, box, ...handles]) plain ? map.removeLayer(layer) : layer.addTo(map)
+    if (plain) {
+      removeHeat(); map.removeLayer(cellGroup)
+      if (regimeLayer) map.removeLayer(regimeLayer)
+      legendElement.innerHTML = ''
+    } else showLayer(showing)
+  }
+
   function showLayer(name) {
     showing = name
+    if (plain) return
     if (name === 'regimes' && regimeLayer) {
       map.removeLayer(cellGroup); removeHeat(); regimeLayer.addTo(map)
     } else {
@@ -370,8 +396,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     // same rule as paintCells: the quietest classes are left clear, the rest glow amber to red
     const swatches = breaks.map((b, i) => {
       const level = breaks.length > 1 ? i / (breaks.length - 1) : 1
-      const t = (level - 0.4) / 0.6
-      const fill = level < 0.4 ? 'transparent; border: 1px dashed rgba(255,255,255,0.4)' : GLOW[Math.round(t * (GLOW.length - 1))]
+      const t = (level - 0.5) / 0.5
+      const fill = level < 0.5 ? 'transparent; border: 1px dashed rgba(255,255,255,0.4)' : GLOW[Math.round(t * (GLOW.length - 1))]
       return `<span><i style="background:${fill}"></i>${format(b)}${i === breaks.length - 1 ? '+' : ''}</span>`
     }).join('')
     legendElement.innerHTML =
@@ -467,7 +493,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     return cancel
   }
 
-  const inside = ll => area && ll.lat >= area[0] && ll.lat <= area[2] && ll.lng >= area[1] && ll.lng <= area[3]
+  const inside = ll => !plain && area && ll.lat >= area[0] && ll.lat <= area[2] && ll.lng >= area[1] && ll.lng <= area[3]
   let swallowClick = false
 
   // Drag the box from its middle to move it
@@ -529,7 +555,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   return {
     map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setImageryDate,
     getPlaces: () => places,
-    refresh: () => { map.invalidateSize(); if (showing === 'hotspots') addHeat() },
+    refresh: () => { map.invalidateSize(); if (showing === 'hotspots' && !plain) addHeat() },
+    setPlain, showWorld: () => map.setView([25, 0], 2.25),
     openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),
     isShowing: () => showing,
     setArea, fitArea, startDrawing,
