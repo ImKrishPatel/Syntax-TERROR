@@ -198,7 +198,8 @@ function drawMapPeriod(picked) {
     })
   }
   if (showM === null) { showY = year || state.toYear; showM = 7 }
-  mapView.setImageryDate(`${showY}-${String(showM + 1).padStart(2, '0')}-15`)
+  // while Play runs, keep the satellite picture still: reloading it every month made the map flicker
+  if (!playingAt) mapView.setImageryDate(`${showY}-${String(showM + 1).padStart(2, '0')}-15`)
   $('mapYear').value = year ? year - data.firstYear + 1 : 0
 }
 

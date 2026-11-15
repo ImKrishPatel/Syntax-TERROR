@@ -684,7 +684,7 @@ body.is-start .top, body.is-start .layout { display: none; }
 .coords-panel .export-actions { margin-top: 12px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .fire-image { image-rendering: auto; opacity: 0.88; }
-#map.is-satellite .fire-image { opacity: 0.6; mix-blend-mode: screen; }   /* lets the NASA picture (burn scars) show through */
+#map.is-satellite .fire-image { opacity: 0.85; }
 
 
 /* ---------- calmer map chrome ---------- */

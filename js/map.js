@@ -217,9 +217,6 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   // Hotspot grid: one square per cell, recoloured whenever the selection changes
   // -------------------------------------------------------------------------
   const cellGroup = L.featureGroup()
-  const dotGroup = L.layerGroup()
-  const dotCanvas = makePane('dots', 250, false)
-  const dots = []
   let cellSquares = []
   let cellValues = null, cellMetric = 'count', cellPeriod = ''
 
@@ -229,10 +226,6 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
         renderer: cellCanvas, color: LAND, weight: 1, fillOpacity: 0, opacity: 0,
       })
       square.cellNumber = i
-      // CONAE-style hotspot dot: size and colour by amount, so the satellite picture shows between dots
-      dots[i] = L.circleMarker([c.lat, c.lon], {
-        renderer: dotCanvas, interactive: false, radius: 0, weight: 0.8, color: '#1a0d08', opacity: 0, fillOpacity: 0,
-      }).addTo(dotGroup)
       return square.addTo(cellGroup)
     })
     cellGroup.bindTooltip(layer => {
@@ -266,7 +259,8 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
   const MAX_LAT = 85.0511
   const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)) * Math.PI / 360))
   const Y_MAX = mercY(MAX_LAT)
-  const IMG = Math.round(360 / CONFIG.cellSize)              // 1 image pixel per cell: the browser blends across whole cells
+  const PX = 4                                               // image pixels per cell, so the glow can be soft
+  const IMG = Math.round(360 / CONFIG.cellSize) * PX
   const paint = document.createElement('canvas'); paint.width = paint.height = IMG
   const smooth = document.createElement('canvas'); smooth.width = smooth.height = IMG
   const heatPane = map.createPane('heat'); heatPane.style.zIndex = 250; heatPane.style.pointerEvents = 'none'
@@ -279,6 +273,10 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     v.forEach((value, i) => {
       const color = fireColor(value, breaks)
       if (!color) return
+      // little fire is nearly see-through, a lot of fire is solid: the picture shows where it is quiet
+      let k = 0
+      while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
+      ctx.globalAlpha = 0.18 + 0.82 * (breaks.length > 1 ? k / (breaks.length - 1) : 0.5)
       const c = data.cells[i]
       const x0 = (c.lon - half + 180) / 360 * IMG, x1 = (c.lon + half + 180) / 360 * IMG
       const y0 = (Y_MAX - mercY(c.lat + half)) / (2 * Y_MAX) * IMG, y1 = (Y_MAX - mercY(c.lat - half)) / (2 * Y_MAX) * IMG
@@ -287,33 +285,28 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
     })
     const out = smooth.getContext('2d')
     out.clearRect(0, 0, IMG, IMG)
-    out.filter = 'blur(0.5px)'
+    ctx.globalAlpha = 1
+    out.filter = `blur(${PX * 0.7}px)`   // soft ember glow instead of hard squares or dots
     out.drawImage(paint, 0, 0)
     out.filter = 'none'
+    out.globalCompositeOperation = 'lighter'   // a brighter core where fire is strongest
+    out.globalAlpha = 0.35
+    out.filter = `blur(${PX * 0.25}px)`
+    out.drawImage(paint, 0, 0)
+    out.filter = 'none'; out.globalAlpha = 1; out.globalCompositeOperation = 'source-over'
     fireImage.setUrl(smooth.toDataURL())
   }
   let heatPoints = null   // kept for the old name used by refresh()
-  const addHeat = () => { if (!map.hasLayer(dotGroup)) dotGroup.addTo(map) }
-  const removeHeat = () => { if (map.hasLayer(dotGroup)) map.removeLayer(dotGroup) }
-  function paintDots(v, breaks) {
-    v.forEach((value, i) => {
-      const dot = dots[i]
-      if (!dot) return
-      const color = fireColor(value, breaks)
-      if (!color) { dot.setStyle({ opacity: 0, fillOpacity: 0 }); dot.setRadius(0); return }
-      let k = 0
-      while (k + 1 < breaks.length && value >= breaks[k + 1]) k++
-      dot.setRadius(2 + 5 * (breaks.length > 1 ? k / (breaks.length - 1) : 0.5))
-      dot.setStyle({ fillColor: color, fillOpacity: 0.85, opacity: 0.6 })
-    })
-  }
+  const addHeat = () => { if (!map.hasLayer(fireImage)) fireImage.addTo(map) }
+  const removeHeat = () => { if (map.hasLayer(fireImage)) map.removeLayer(fireImage) }
+
   const sizeHeat = () => {}
 
   function setCells(values, metric, period) {
     cellValues = values; cellMetric = metric; cellPeriod = period
     const v = values[metric]
     const breaks = fireBreaks(v)
-    paintDots(v, breaks)
+    paintCells(v, breaks)
     cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
     if (showing === 'hotspots') addHeat()
     hotspotLegend = { breaks, metric, period }
