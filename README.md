@@ -78,3 +78,24 @@ To use real data, replace the files (see [DATA_FORMAT.md](DATA_FORMAT.md)) and s
 - Work on your own branch.
 - Before pushing to `main`, pull `main` and merge it into your branch first.
 - Never force-push.
+
+## Hear the Fire Season (Mridul)
+
+Select **Listen** above the calendar to open the integrated panel. Choose a listening
+ year, play activity or anomaly tones, enable spoken month descriptions, or hear a
+season summary. Playback selects the same month on the calendar, map, verdict and
+season chart. Changing the area, year range or measure stops prior playback.
+The listening mode and calendar colour mode stay synchronized.
+
+Summary speech uses the selected speed and a fixed half-second gap after periods
+and semicolons. The sound guide includes named examples; the guided tutorial is
+not included in this version. All current repository data remains demo data.
+
+`js/listening-model.js` adapts the shared calendar table. Missing months and areas
+without grid cells are unavailable, not zero. Within covered areas, the upstream
+CSV loader currently assumes omitted rows mean zero; it does not provide finer
+observation-coverage flags. Comparisons need at least two years and nonzero
+variation. Anomaly shortcuts use the existing two-sigma unusual threshold.
+FRP audio descriptions use megawatts of summed fire radiative power, not energy.
+
+Checks: `node --test tests/listening.test.mjs`.

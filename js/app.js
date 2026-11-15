@@ -12,7 +12,7 @@ import { SCORE_STEPS } from './colors.js'
 import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
-import { playCalendar, stopCalendar, isPlaying } from './sound.js'
+import { createListeningPanel } from './sound.js'
 
 const $ = id => document.getElementById(id)
 
@@ -26,6 +26,7 @@ const state = {
   layer: 'hotspots',               // map layer: 'hotspots' or 'regimes'
 }
 
+let listening = null
 let mapView = null
 let table = null        // the calendar numbers for the current area and years
 let regimes = null      // { geojson, summary } once loaded
@@ -62,7 +63,8 @@ function writeAddress() {
   } catch (err) { /* some embedded viewers do not allow this; the app still works */ }
 }
 
-function update(changes) {
+function update(changes, fromAudio = false) {
+  if (!fromAudio) listening?.stop()
   Object.assign(state, changes)
   // a selected month must be inside the selected years
   if (state.month) {
@@ -140,6 +142,8 @@ function render() {
     }
   })
 
+  listening?.update(table, picked, JSON.stringify([state.area,state.fromYear,state.toYear,state.metric]), cellsInside > 0, state.mode)
+
   // --- season chart ---
   const overview = overviewVerdict(table)
   const chartYear = picked ? picked.year : (overview.bigYear || state.toYear)
@@ -169,6 +173,14 @@ function renderVerdict(picked, totals, cellsInside) {
     el.innerHTML = where +
       '<h1 class="verdict-sentence">There is no data for this area yet.</h1>' +
       '<p class="verdict-help">Move the area inside the dashed outline on the map, or pick one from the Area menu.</p>'
+    return
+  }
+
+  if (picked && !Number.isFinite(table.value[picked.year - table.years[0]]?.[picked.month])) {
+    el.className = 'verdict level-none'
+    el.innerHTML = where + `<h1 class="verdict-sentence">No data for ${MONTHS[picked.month]} ${picked.year}.</h1>` +
+      '<p class="verdict-help">Missing observations do not mean zero activity.</p><button type="button" class="link" id="clearMonth">Back to all years</button>'
+    $('clearMonth').onclick = () => update({ month: null })
     return
   }
 
@@ -397,22 +409,12 @@ function wireControls() {
   document.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => update({ mode: b.dataset.mode }) })
   document.querySelectorAll('[data-layer]').forEach(b => { b.onclick = () => update({ layer: b.dataset.layer }) })
 
-  // listen
-  const stopListening = () => {
-    stopCalendar()
-    markPlaying($('calendar'), null)
-    $('listenButton').setAttribute('aria-pressed', 'false')
-    $('listenText').textContent = 'Listen'
-  }
-  $('listenButton').onclick = () => {
-    if (isPlaying()) { stopListening(); return }
-    $('listenButton').setAttribute('aria-pressed', 'true')
-    $('listenText').textContent = 'Stop'
-    playCalendar(table, (row, month) => {
-      markPlaying($('calendar'), row, month)
-      if (row !== null) $('listenText').textContent = `Stop (${table.years[row]})`
-    }, stopListening)
-  }
+  // The listening feature shares month selection with the calendar and map.
+  listening = createListeningPanel({
+    onPick: (year, month) => update({ month: monthKey(year,month) }, true),
+    onMode: mode => update({mode}),
+    onHighlight: (row, month) => markPlaying($('calendar'),row,month),
+  })
 
   // share
   $('shareButton').onclick = async () => {
@@ -490,7 +492,7 @@ async function start() {
   renderForecast(forecast)
   renderValidation(validation)
 
-  window.addEventListener('hashchange', () => { readAddress(); render() })
+  window.addEventListener('hashchange', () => { listening?.stop(); readAddress(); render() })
 }
 
 start()
