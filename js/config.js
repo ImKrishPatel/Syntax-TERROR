@@ -32,6 +32,20 @@ export const CONFIG = {
     { name: 'Jasper and the Rockies', box: [51.5, -119.5, 54, -116] },
   ],
 
+  // The chat box (js/chat.js).
+  // url: address of our small chat server (server/chat-worker.js on Cloudflare).
+  // Leave it empty until the server is set up (see README).
+  chat: {
+    url: 'https://ember-chat.imkrishpatel5.workers.dev/',
+    maxTurns: 6,   // how many earlier questions it remembers
+    ideas: [
+      'Which month was the most unusual here?',
+      'Is the latest year worse than usual?',
+      'When is fire season in this area?',
+      'Explain the fire regimes here simply',
+    ],
+  },
+
   // A month counts as "unusual" when its score is at least this many sigma
   unusualSigma: 2,
 

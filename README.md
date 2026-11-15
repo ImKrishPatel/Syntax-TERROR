@@ -78,3 +78,15 @@ To use real data, replace the files (see [DATA_FORMAT.md](DATA_FORMAT.md)) and s
 - Work on your own branch.
 - Before pushing to `main`, pull `main` and merge it into your branch first.
 - Never force-push.
+
+## Chat box
+
+The round button in the bottom-right corner opens a chat. You can ask about the area and years on screen, like "which month was the most unusual?", and it answers from the same numbers the page shows. Nobody needs a key to use it.
+
+How it fits together:
+
+- `js/chat.js` is the chat box on the page. `describeView()` in `js/app.js` writes down what is on screen as text.
+- `server/chat-worker.js` is a small free server on Cloudflare Workers. It holds the Google Gemini key as a secret and passes questions to Gemini.
+- `chat.url` in `js/config.js` is the address of that server.
+
+**Never put the Gemini key in this repo.** It only goes into Cloudflare's secret settings.

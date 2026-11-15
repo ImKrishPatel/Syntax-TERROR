@@ -13,6 +13,7 @@ import { createMap } from './map.js'
 import { drawCalendar, markPlaying } from './calendar.js'
 import { drawSeasonChart, drawForecastChart, monthShape } from './charts.js'
 import { playCalendar, stopCalendar, isPlaying } from './sound.js'
+import { initChat } from './chat.js'
 
 const $ = id => document.getElementById(id)
 
@@ -30,6 +31,8 @@ let mapView = null
 let table = null        // the calendar numbers for the current area and years
 let regimes = null      // { geojson, summary } once loaded
 let cancelDrawing = null
+let forecastData = null  // forecast.json and validation.json, kept for the chat box
+let validationData = null
 
 // ---------------------------------------------------------------------------
 // State <-> page address
@@ -232,13 +235,9 @@ function scoreMeter(z) {
 // ---------------------------------------------------------------------------
 // Fire regimes panel (Pearl's files)
 // ---------------------------------------------------------------------------
-function renderRegimes() {
-  const body = $('regimeBody')
-  if (!regimes) {
-    body.innerHTML = '<p class="empty">No regime layer found. Run <code>python -m analysis.fire_regimes.run</code> to create <code>public/data/fire_regimes.geojson</code>.</p>'
-    return
-  }
-  // count the cells of each regime inside the selected area
+// count the cells of each regime inside the selected area
+// (used by the regimes panel and by the chat box)
+function regimesInArea() {
   const [south, west, north, east] = state.area
   const counts = new Map()
   let total = 0, shifted = 0
@@ -250,14 +249,23 @@ function renderRegimes() {
     total++
     if (f.properties.shifted) shifted++
   }
+  const summaries = new Map(((regimes.summary && regimes.summary.regimes) || []).map(r => [r.regime_id, r]))
+  const names = new Map(regimes.geojson.features.map(f => [f.properties.regime_id, f.properties]))
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  return { sorted, total, shifted, summaries, names }
+}
+
+function renderRegimes() {
+  const body = $('regimeBody')
+  if (!regimes) {
+    body.innerHTML = '<p class="empty">No regime layer found. Run <code>python -m analysis.fire_regimes.run</code> to create <code>public/data/fire_regimes.geojson</code>.</p>'
+    return
+  }
+  const { sorted, total, shifted, summaries, names } = regimesInArea()
   if (!total) {
     body.innerHTML = '<p class="empty">No regime cells in this area.</p>'
     return
   }
-
-  const summaries = new Map(((regimes.summary && regimes.summary.regimes) || []).map(r => [r.regime_id, r]))
-  const names = new Map(regimes.geojson.features.map(f => [f.properties.regime_id, f.properties]))
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
 
   let html = '<ul class="regimes">'
   for (const [id, n] of sorted) {
@@ -310,6 +318,80 @@ function renderValidation(validation) {
     (validation.is_demo ? ' Sample numbers until the real check is run.' : '')
   $('validationBody').innerHTML = '<ul class="checks">' + validation.metrics.map(m =>
     `<li><p class="check-value">${m.value}<span>${m.unit || ''}</span></p><p class="check-label">${m.label}</p>${m.detail ? `<p class="check-detail">${m.detail}</p>` : ''}</li>`).join('') + '</ul>'
+}
+
+// ---------------------------------------------------------------------------
+// Chat box: write down what is on screen as plain text, so the chatbot
+// answers from the same numbers the user is looking at
+// ---------------------------------------------------------------------------
+function describeView() {
+  const noTags = html => html.replace(/<[^>]+>/g, '')
+  const totals = monthlyTotals(state.area)
+  const counts = buildTable(totals, 'count', state.fromYear, state.toYear)
+  const energy = buildTable(totals, 'frp', state.fromYear, state.toYear)
+  const lines = []
+
+  lines.push(`Area: ${areaName()} (${areaText()})`)
+  lines.push(`Years shown: ${state.fromYear} to ${state.toYear}`)
+  lines.push(`Measure picked on screen: ${state.metric === 'frp' ? 'fire energy (FRP)' : 'hotspot count'}`)
+  if (CONFIG.isDemoData) lines.push('NOTE: this is made-up demo data, not real satellite measurements.')
+  if (cellsInArea(state.area).reduce((a, b) => a + b, 0) === 0) {
+    lines.push('There is no data inside this area.')
+    return lines.join('\n')
+  }
+  lines.push(`Headline on screen: ${noTags(overviewVerdict(table).sentence)}`)
+  if (state.month) {
+    const picked = focus()
+    lines.push(`Selected month: ${MONTHS[picked.month]} ${picked.year}. Headline: ${noTags(monthVerdict(table, picked.year, picked.month).sentence)}`)
+  }
+
+  lines.push('')
+  lines.push('Usual month (median over all years shown): month = hotspots, fire energy')
+  for (let m = 0; m < 12; m++) {
+    lines.push(`${MONTHS[m]} = ${formatNumber(counts.usual[m].median)}, ${formatPower(energy.usual[m].median)}`)
+  }
+
+  lines.push('')
+  lines.push('Every month: year-month = hotspots, fire energy, score in sigma (compared with the same month in other years), source')
+  counts.years.forEach((year, row) => {
+    for (let m = 0; m < 12; m++) {
+      const n = counts.value[row][m]
+      if (Number.isNaN(n)) continue
+      const share = counts.estimatedShare[row][m]
+      const source = Number.isNaN(share) ? '' : share >= 0.5 ? ', estimated from MODIS' : ', real VIIRS'
+      lines.push(`${monthKey(year, m)} = ${formatNumber(n)}, ${formatPower(energy.value[row][m])}, ${formatScore(counts.score[row][m])}${source}`)
+    }
+  })
+
+  lines.push('')
+  lines.push('Yearly totals: year = hotspots, fire energy')
+  counts.years.forEach((year, row) => {
+    lines.push(`${year} = ${formatNumber(counts.yearTotal[row])}, ${formatPower(energy.yearTotal[row])}${counts.yearComplete[row] ? '' : ' (year not complete)'}`)
+  })
+
+  if (regimes) {
+    const r = regimesInArea()
+    if (r.total) {
+      lines.push('')
+      lines.push(`Fire regimes in this area (${r.total} grid cells, ${r.shifted} changed regime over the years):`)
+      for (const [id, n] of r.sorted) {
+        const s = r.summaries.get(id)
+        lines.push(`- ${r.names.get(id).regime_name}: ${Math.round(n / r.total * 100)}% of cells. ${s && s.summary ? s.summary : ''}`)
+      }
+    }
+  }
+
+  if (forecastData && forecastData.days && forecastData.days.length) {
+    lines.push('')
+    lines.push(`Forecast (${forecastData.region || 'whole data region'}, ${forecastData.unit || 'hotspots per day'}${forecastData.is_demo ? ', sample numbers' : ''}):`)
+    lines.push(JSON.stringify(forecastData.days))
+  }
+  if (validationData && validationData.metrics && validationData.metrics.length) {
+    lines.push('')
+    lines.push(`Check that MODIS and VIIRS agree${validationData.is_demo ? ' (sample numbers)' : ''}:`)
+    for (const m of validationData.metrics) lines.push(`- ${m.label}: ${m.value}${m.unit || ''}. ${m.detail || ''}`)
+  }
+  return lines.join('\n')
 }
 
 // ---------------------------------------------------------------------------
@@ -489,6 +571,9 @@ async function start() {
   render()
   renderForecast(forecast)
   renderValidation(validation)
+  forecastData = forecast
+  validationData = validation
+  initChat(describeView)
 
   window.addEventListener('hashchange', () => { readAddress(); render() })
 }
