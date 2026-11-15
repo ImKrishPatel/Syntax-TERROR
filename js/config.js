@@ -2,8 +2,6 @@
 // without digging through the other files.
 
 export const CONFIG = {
-  // Show the "Demo data" tag in the header. Set to false once real data is in.
-
   // What the record is, for the "Record" fact. hotspots.csv is real MODIS observations
   // (NASA FIRMS, global, 2006 to 2026) until the harmonized MODIS + VIIRS record replaces it.
   observedLabel: 'MODIS observations',
@@ -25,7 +23,7 @@ export const CONFIG = {
   // The area selected when the page first opens: [south, west, north, east]
   defaultArea: [55, -119, 59.5, -110],
 
-  // Quick picks in the "Area" menu: [south, west, north, east]
+  // Suggested places on the Home page: [south, west, north, east]
   presets: [
     { name: 'Northern Alberta', box: [55, -119, 59.5, -110] },
     { name: 'BC Interior', box: [49.5, -125, 54, -118.5] },
@@ -39,10 +37,50 @@ export const CONFIG = {
     { name: 'Northern Australia', box: [-18, 125, -11, 145] },
   ],
 
+  // Place search. Photon is a free search of OpenStreetMap place names (no key needed).
+  // If it cannot be reached, the search falls back to the city list in public/basemap/world.json.
+  search: {
+    url: 'https://photon.komoot.io/api/',
+    results: 6,
+  },
+
+  // Map pictures ("tiles") for each map style. All free, no key needed.
+  // {z}/{x}/{y} are filled in by the map library. `labels` is drawn on top of the picture.
+  basemaps: {
+    map: {
+      light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      credit: '© OpenStreetMap contributors © CARTO',
+    },
+    satellite: {
+      light: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      credit: 'Imagery © Esri, Maxar, Earthstar Geographics',
+    },
+    terrain: {
+      light: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      credit: '© Esri, HERE, Garmin, USGS, © OpenStreetMap contributors',
+    },
+  },
+
+  // The chat box (js/chat.js).
+  // url: address of our small chat server (server/chat-worker.js on Cloudflare).
+  // Leave it empty to switch the chat off.
+  chat: {
+    url: 'https://ember-chat.imkrishpatel5.workers.dev/',
+    maxTurns: 6,   // how many earlier questions it remembers
+    ideas: [
+      'Which month was the most unusual here?',
+      'Is the latest year worse than usual?',
+      'When is fire season in this area?',
+      'Explain the fire regimes here simply',
+    ],
+  },
+
   // A month counts as "unusual" when its score is at least this many sigma
   unusualSigma: 2,
 
-  // Extra town labels for the map (the basemap only has the bigger cities)
+  // Extra towns for the offline place search (the city list only has the bigger cities)
   extraPlaces: [
     ['Prince George', 53.92, -122.75], ['Kamloops', 50.67, -120.33], ['Kelowna', 49.89, -119.5],
     ['Grande Prairie', 55.17, -118.79], ['Jasper', 52.87, -118.08], ['Slave Lake', 55.28, -114.77],

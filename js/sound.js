@@ -2,9 +2,9 @@
 import { createPlayer, soundFor } from './fire-audio.js'
 import { listeningMonths, describeMonth, seasonSummary, strongestMonth } from './listening-model.js'
 import { MONTHS } from './config.js'
-import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=pearl-voice-4'
+import { attachMicrophone, KEYWORD_GUIDE } from './voice-commands.js?v=main-voice-5'
 
-export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
+export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, onOpen, onVoiceStart, onSpeechChange, audioPlayer = createPlayer(), microphoneFactory = attachMicrophone }) {
   const $ = id => document.getElementById(id)
   const player = audioPlayer
   let table, context = '', covered = true, months = [], year, index = 0, token = 0, running = false
@@ -110,6 +110,7 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, on
     if(command.type==='leave') {
       if(beforeMicrophone) {
         $('audioSpeech').checked=beforeMicrophone.speech
+        onSpeechChange?.(beforeMicrophone.speech)
         $('audioMute').checked=beforeMicrophone.muted
         $('audioVolume').value=beforeMicrophone.volume
         $('audioVolumeText').textContent=`Volume · ${Math.round(Number(beforeMicrophone.volume)*100)}%`
@@ -117,7 +118,7 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, on
       $('voiceStatus').textContent='Microphone action cancelled.'
       return
     }
-    $('audioSpeech').checked=true
+    $('audioSpeech').checked=true;onSpeechChange?.(true)
     // A microphone request explicitly asks for audible output.
     $('audioMute').checked=false
     if(Number($('audioVolume').value)===0)$('audioVolume').value='0.6'
@@ -187,7 +188,7 @@ export function createListeningPanel({ onPick, onHighlight, onMode, onMetric, on
     onStart:()=>{
       onVoiceStart?.()
       beforeMicrophone={speech:$('audioSpeech').checked,muted:$('audioMute').checked,volume:$('audioVolume').value}
-      stop();$('audioSpeech').checked=true;$('audioMute').checked=false
+      stop();$('audioSpeech').checked=true;onSpeechChange?.(true);$('audioMute').checked=false
       if(Number($('audioVolume').value)===0)$('audioVolume').value='0.6'
       $('audioVolumeText').textContent=`Volume · ${Math.round(Number($('audioVolume').value)*100)}%`
       player.ready().catch(e=>{$('audioError').textContent=e.message})
