@@ -131,15 +131,6 @@ code { font-family: inherit; font-weight: 600; overflow-wrap: anywhere; }
 }
 .brand-team { color: var(--ink-2); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
-.demo-tag {
-  padding: 3px 10px;
-  border: 1px dashed var(--ink-2);
-  border-radius: 99px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
 
 .export { position: relative; }
 .export-panel {

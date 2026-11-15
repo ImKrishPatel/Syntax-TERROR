@@ -32,7 +32,6 @@
       <ul class="search-results" id="placeResults" role="listbox" hidden></ul>
     </div>
     <div class="top-actions">
-      <span class="demo-tag" id="demoTag" hidden title="These numbers are made up for the demo. They are not real satellite measurements.">Demo data, not real measurements</span>
       <div class="kebab">
         <button type="button" class="kebab-button" id="menuButton" aria-haspopup="menu" aria-expanded="false" aria-controls="appMenu" title="More">
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
@@ -209,7 +208,7 @@
         <div id="regimeBody"></div>
       </section>
 
-      <section class="panel" id="forecastPanel">
+      <section class="panel" id="forecastPanel" hidden>
         <div class="panel-head">
           <h2>Forecast: expected against actual</h2>
           <p class="panel-sub" id="forecastSub"></p>
@@ -226,7 +225,7 @@
       </section>
 
       <footer class="foot">
-        <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record puts both on the VIIRS scale so that 2005 can be compared with 2025.</p>
+        <p><b>What is a hotspot?</b> A satellite pixel that was hot enough to be an active fire when the satellite passed over. MODIS has seen them since 2000 at 1 km, VIIRS since 2012 at 375 m. This record uses MODIS for every year, so 2006 and 2026 are counted the same way; VIIRS is used to check it (below).</p>
         <p><b>What is the score?</b> How far a month is from the average of that same calendar month, counted in standard deviations (σ). Around 0 is normal. 2 or more is unusual.</p>
         <p class="foot-sources">Ember Atlas by Syntax TERROR (Aashana, Pearl, Mridul, Snavya, Krish, Shriya) for NASA Space Apps 2026.</p>
         <p class="foot-sources">Data: NASA FIRMS active fire hotspots (MODIS C6.1 on Terra and Aqua, 2006 to 2026). Satellite picture: NASA GIBS / Worldview (MODIS Terra and Aqua corrected reflectance, bands 7-2-1, cloud-free composite). Place names for search: Natural Earth. Map library: Leaflet. Typeface: Archivo.</p>

@@ -3,7 +3,6 @@
 
 export const CONFIG = {
   // Show the "Demo data" tag in the header. Set to false once real data is in.
-  isDemoData: false,
 
   // What the record is, for the "Record" fact. hotspots.csv is real MODIS observations
   // (NASA FIRMS, global, 2006 to 2026) until the harmonized MODIS + VIIRS record replaces it.

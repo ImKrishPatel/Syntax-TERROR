@@ -249,7 +249,7 @@ export function createMap(element, legendElement, { onAreaChange, onRegimeClick 
       interactive: false, keyboard: false,
       icon: L.divIcon({
         className: 'coverage-label', iconSize: null,
-        html: `<span>${CONFIG.isDemoData ? 'Demo data covers this box' : 'Data coverage'}</span>`,
+        html: `<span>Data coverage</span>`,
       }),
     }).addTo(map)
   }

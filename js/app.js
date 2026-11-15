@@ -357,13 +357,11 @@ function regimeStory(p) {
 // Forecast and validation panels (drawn once; they do not depend on the area yet)
 // ---------------------------------------------------------------------------
 function renderForecast(forecast) {
-  if (!forecast || !forecast.days || !forecast.days.length) {
-    $('forecastSub').textContent = ''
-    $('forecastBody').innerHTML = '<p class="empty">No forecast yet. Add <code>public/data/forecast.json</code> (format in DATA_FORMAT.md) and it will show up here.</p>'
-    return
-  }
-  $('forecastSub').textContent = `${forecast.region || 'Whole data region'}, ${forecast.unit || 'hotspots per day'}.` +
-    (forecast.is_demo ? ' Sample numbers until the forecast model is connected.' : '')
+  // the panel only appears once a real forecast file exists (Snavya's model)
+  const real = forecast && !forecast.is_demo && forecast.days && forecast.days.length
+  $('forecastPanel').hidden = !real
+  if (!real) return
+  $('forecastSub').textContent = `${forecast.region || 'Whole data region'}, ${forecast.unit || 'hotspots per day'}.`
   $('forecastBody').innerHTML =
     '<div class="chart-key"><span><i class="key-usual is-solid"></i>Expected</span><span><i class="key-band"></i>Likely range</span><span><i class="key-dot"></i>Actual</span></div>' +
     '<div class="chart" id="forecastChart"></div>'
@@ -371,14 +369,11 @@ function renderForecast(forecast) {
 }
 
 function renderValidation(validation) {
-  if (!validation || !validation.metrics || !validation.metrics.length) {
-    $('validationSub').textContent = ''
-    $('validationBody').innerHTML = '<p class="empty">No validation numbers yet. Add <code>public/data/validation.json</code> (format in DATA_FORMAT.md).</p>'
-    return
-  }
+  const real = validation && !validation.is_demo && validation.metrics && validation.metrics.length
+  $('validationPanel').hidden = !real
+  if (!real) return
   $('validationSub').textContent = (validation.note || '') +
-    (validation.overlap_period ? ` Overlap period: ${validation.overlap_period}.` : '') +
-    (validation.is_demo ? ' Sample numbers until the real check is run.' : '')
+    (validation.overlap_period ? ` Overlap period: ${validation.overlap_period}.` : '')
   $('validationBody').innerHTML = '<ul class="checks">' + validation.metrics.map(m =>
     `<li><p class="check-value">${m.value}<span>${m.unit || ''}</span></p><p class="check-label">${m.label}</p>${m.detail ? `<p class="check-detail">${m.detail}</p>` : ''}</li>`).join('') + '</ul>'
 }
@@ -620,7 +615,6 @@ function wireControls() {
 // Start
 // ---------------------------------------------------------------------------
 async function start() {
-  $('demoTag').hidden = !CONFIG.isDemoData
   // a shared link (with an area in it) opens straight on the map; otherwise start on the search screen
   if (!new URLSearchParams(location.hash.slice(1)).get('area')) document.body.classList.add('is-start')
 
