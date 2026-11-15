@@ -7,11 +7,14 @@ build/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Environment files (API keys etc.)
+# Environment files and secrets
 .env
 .env.*
 
@@ -25,3 +28,55 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 src/data/
+
+# Documentation build output
+/site
+
+# Python type checkers and linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+.ruff_cache/
+
+# PyCharm / VS Code temporary files
+tempCodeRunnerFile.py
+
+# Abstra
+.abstra/
+
+# PyPI credentials
+.pypirc
+
+# Marimo
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Local and generated project data/artifacts; keep directory placeholders tracked.
+/data/raw/**
+!/data/raw/**/
+!/data/raw/**/.gitkeep
+/data/processed/**
+!/data/processed/**/
+!/data/processed/**/.gitkeep
+/data/overlap/**
+!/data/overlap/**/
+!/data/overlap/**/.gitkeep
+/data/environmental/**
+!/data/environmental/**/
+!/data/environmental/**/.gitkeep
+/models/**
+!/models/**/
+!/models/**/.gitkeep
+/outputs/**
+!/outputs/**/
+!/outputs/**/.gitkeep
+/results/**
+!/results/**/
+!/results/**/.gitkeep
