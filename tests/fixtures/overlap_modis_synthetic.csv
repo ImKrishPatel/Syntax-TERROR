@@ -1,0 +1,5 @@
+latitude,longitude,acq_date,acq_time,satellite,instrument,confidence,frp,daynight
+40.0,-120.0,2020-06-01,1200,TERRA,MODIS,80,10.0,D
+0.0,179.995,2020-06-01,1200,TERRA,MODIS,85,11.0,N
+10.0,10.0,2020-06-01,1200,AQUA,MODIS,70,7.0,D
+10.0,10.0,2020-06-02,1200,AQUA,MODIS,70,8.0,D
