@@ -11,7 +11,7 @@ from .firms import (
     load_viirs,
     normalize_firms_schema,
 )
-from .samples import TrainingSample, build_training_sample
+from .samples import SpatialFeatureInput, TrainingSample, build_training_sample
 from .splitting import ParentSampleSplit, split_samples_by_parent
 from .target_grid import (
     GridTarget,
@@ -23,6 +23,7 @@ __all__ = [
     "GridTarget",
     "LocalTargetGrid",
     "ParentSampleSplit",
+    "SpatialFeatureInput",
     "TrainingSample",
     "build_training_sample",
     "build_viirs_target_grid",

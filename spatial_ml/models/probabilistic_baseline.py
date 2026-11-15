@@ -10,7 +10,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
-from spatial_ml.data.samples import TrainingSample
+from spatial_ml.data.samples import SpatialFeatureInput, TrainingSample
+
+FeatureInput = TrainingSample | SpatialFeatureInput
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,13 +56,13 @@ def _confidence_features(value: object) -> Tuple[float, float, float, float]:
 
 
 def _sample_feature_matrix(
-    sample: TrainingSample,
+    sample: FeatureInput,
 ) -> Tuple[np.ndarray, Tuple[str, ...]]:
     grid_metadata = sample.metadata.get("grid")
     if not isinstance(grid_metadata, dict):
         raise ValueError(f"Sample {sample.modis_id!r} has no target-grid metadata.")
     resolution_m = _finite_number(grid_metadata.get("resolution_m"))
-    height, width = sample.target_grid.shape
+    height, width = sample.grid_shape
     if not math.isfinite(resolution_m) or resolution_m <= 0:
         raise ValueError(
             f"Sample {sample.modis_id!r} has an invalid grid resolution."
@@ -108,7 +110,7 @@ def _sample_feature_matrix(
 
 
 def sample_to_cell_feature_matrix(
-    sample: TrainingSample,
+    sample: FeatureInput,
 ) -> Tuple[np.ndarray, Tuple[str, ...]]:
     """Return M5-compatible features in north-to-south row-major cell order."""
     return _sample_feature_matrix(sample)
@@ -266,7 +268,7 @@ class ProbabilisticRandomForest:
         self.training_cell_count = int(target.size)
         return self
 
-    def predict(self, sample: TrainingSample) -> SpatialProbabilityEstimate:
+    def predict(self, sample: FeatureInput) -> SpatialProbabilityEstimate:
         """Predict cell probabilities and per-cell tree-to-tree spread."""
         if self._pipeline is None:
             raise RuntimeError("The Random Forest must be fitted before prediction.")
@@ -291,7 +293,7 @@ class ProbabilisticRandomForest:
                 tree_probabilities.append(np.zeros(len(features), dtype=float))
 
         ensemble = np.stack(tree_probabilities, axis=0)
-        height, width = sample.target_grid.shape
+        height, width = sample.grid_shape
         probability = ensemble.mean(axis=0).reshape(height, width)
         uncertainty = ensemble.std(axis=0).reshape(height, width)
         metadata: Dict[str, object] = {

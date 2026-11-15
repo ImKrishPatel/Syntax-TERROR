@@ -179,7 +179,22 @@ def evaluate_local_firms(
         calibration_method=calibration_method,
         input_provenance=input_provenance,
     )
-    return write_evaluation_artifacts(evaluation, output_dir)
+    model_path = spatial_ensemble.save(
+        Path(output_dir) / "spatial_ensemble.pt"
+    )
+    calibration_artifacts = {}
+    for name, attempt in evaluation.calibration_attempts.items():
+        if attempt.calibrator is not None:
+            path = Path(output_dir) / f"{name}_calibrator.json"
+            attempt.calibrator.save(path)
+            calibration_artifacts[name] = _file_provenance(path)
+    evaluation.report["model_artifacts"] = {
+        "spatial_ensemble": _file_provenance(model_path)
+    }
+    evaluation.report["calibration_artifacts"] = calibration_artifacts
+    artifacts = write_evaluation_artifacts(evaluation, output_dir)
+    artifacts["spatial_ensemble_model"] = model_path
+    return artifacts
 
 
 def _parser() -> argparse.ArgumentParser:

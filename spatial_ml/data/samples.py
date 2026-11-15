@@ -47,6 +47,54 @@ def _json_safe(value: Any) -> Any:
 
 
 @dataclass(frozen=True)
+class SpatialFeatureInput:
+    """Label-free MODIS/environment input used for model inference."""
+
+    modis_id: str
+    modis_features: Dict[str, Any]
+    environmental_features: np.ndarray
+    environmental_feature_names: Tuple[str, ...]
+    grid_shape: Tuple[int, int]
+    metadata: Dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not self.modis_id:
+            raise ValueError("modis_id must not be empty.")
+        if (
+            len(self.grid_shape) != 2
+            or any(
+                isinstance(dimension, bool)
+                or not isinstance(dimension, int)
+                or dimension < 1
+                for dimension in self.grid_shape
+            )
+        ):
+            raise ValueError("grid_shape must contain two positive integers.")
+        environmental = np.asarray(self.environmental_features, dtype=np.float32)
+        if environmental.ndim != 3 or environmental.shape[:2] != self.grid_shape:
+            raise ValueError(
+                "Environmental features must align with grid_shape as H×W×C."
+            )
+        if environmental.shape[2] != len(self.environmental_feature_names):
+            raise ValueError("Environmental feature names do not match channels.")
+        if len(set(self.environmental_feature_names)) != len(
+            self.environmental_feature_names
+        ):
+            raise ValueError("Environmental feature names must be unique.")
+        grid_metadata = self.metadata.get("grid")
+        if not isinstance(grid_metadata, dict):
+            raise ValueError("Inference metadata must include target-grid metadata.")
+        if (grid_metadata.get("height"), grid_metadata.get("width")) != (
+            self.grid_shape[0],
+            self.grid_shape[1],
+        ):
+            raise ValueError("Grid metadata dimensions do not match grid_shape.")
+        if self.metadata.get("modis_id", self.modis_id) != self.modis_id:
+            raise ValueError("metadata modis_id must match the input modis_id.")
+        object.__setattr__(self, "environmental_features", environmental)
+
+
+@dataclass(frozen=True)
 class TrainingSample:
     """One traceable input/target pair with aligned environmental channels."""
 
@@ -78,6 +126,11 @@ class TrainingSample:
         object.__setattr__(
             self, "target_observations", self.target_observations.copy()
         )
+
+    @property
+    def grid_shape(self) -> Tuple[int, int]:
+        """Return the input/target grid shape without exposing labels to inference."""
+        return self.target_grid.shape
 
     def save(self, path: Union[str, Path]) -> Path:
         """Write arrays and JSON metadata to a pickle-free compressed NPZ."""

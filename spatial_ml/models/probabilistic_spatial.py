@@ -13,7 +13,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from spatial_ml import config
-from spatial_ml.data.samples import TrainingSample
+from spatial_ml.data.samples import SpatialFeatureInput, TrainingSample
 from spatial_ml.models.probabilistic_baseline import (
     SpatialProbabilityEstimate,
     sample_to_cell_feature_matrix,
@@ -21,6 +21,7 @@ from spatial_ml.models.probabilistic_baseline import (
 
 LOGGER = logging.getLogger(__name__)
 MODEL_VERSION = "1.0.0"
+PREPROCESSING_VERSION = "1.0.0"
 ARTIFACT_FORMAT_VERSION = 1
 TARGET_DEFINITION = "observed_viirs_occupancy"
 
@@ -37,7 +38,7 @@ def _serializable_scalar(value: object) -> object:
 
 
 def training_sample_to_spatial_tensor(
-    sample: TrainingSample,
+    sample: TrainingSample | SpatialFeatureInput,
 ) -> Tuple[np.ndarray, Tuple[str, ...]]:
     """Convert an M5 feature matrix into [channels, north-to-south rows, columns].
 
@@ -47,7 +48,7 @@ def training_sample_to_spatial_tensor(
     Target values and VIIRS status/evidence metadata are never included.
     """
     matrix, feature_names = sample_to_cell_feature_matrix(sample)
-    height, width = sample.target_grid.shape
+    height, width = sample.grid_shape
     if matrix.shape[0] != height * width:
         raise ValueError("Cell features do not match the sample target-grid shape.")
     channels_last = matrix.reshape(height, width, len(feature_names))
@@ -255,6 +256,7 @@ class ProbabilisticSpatialEnsemble:
         self.training_cell_count = 0
         self.member_seeds: Tuple[int, ...] = ()
         self.positive_class_weight: Optional[float] = None
+        self.artifact_preprocessing_version = PREPROCESSING_VERSION
 
     def _new_network(self, input_channels: int) -> _SmallSpatialNetwork:
         return _SmallSpatialNetwork(
@@ -425,6 +427,25 @@ class ProbabilisticSpatialEnsemble:
                 "event_id": _serializable_scalar(
                     sample.metadata.get("event_id")
                 ),
+                "modis_latitude": _serializable_scalar(
+                    sample.metadata.get("modis_latitude")
+                ),
+                "modis_longitude": _serializable_scalar(
+                    sample.metadata.get("modis_longitude")
+                ),
+                "modis_satellite": _serializable_scalar(
+                    sample.metadata.get("modis_satellite")
+                ),
+                "modis_instrument": _serializable_scalar(
+                    sample.metadata.get("modis_instrument")
+                ),
+                "grid_height": self.grid_height,
+                "grid_width": self.grid_width,
+                "grid_resolution_m": _serializable_scalar(
+                    sample.metadata.get("grid", {}).get("resolution_m")
+                    if isinstance(sample.metadata.get("grid"), dict)
+                    else None
+                ),
             }
             for sample in included
         )
@@ -433,12 +454,14 @@ class ProbabilisticSpatialEnsemble:
         self.positive_class_weight = positive_class_weight
         return self
 
-    def _input_tensor(self, sample: TrainingSample) -> torch.Tensor:
+    def _input_tensor(
+        self, sample: TrainingSample | SpatialFeatureInput
+    ) -> torch.Tensor:
         if self._preprocessing is None:
             raise RuntimeError("The spatial ensemble must be fitted before prediction.")
-        if sample.target_grid.shape != (self.grid_height, self.grid_width):
+        if sample.grid_shape != (self.grid_height, self.grid_width):
             raise ValueError(
-                f"Prediction grid shape {sample.target_grid.shape} does not match "
+                f"Prediction grid shape {sample.grid_shape} does not match "
                 f"configured ({self.grid_height}, {self.grid_width})."
             )
         matrix, feature_names = sample_to_cell_feature_matrix(sample)
@@ -454,7 +477,25 @@ class ProbabilisticSpatialEnsemble:
         channel_first = np.ascontiguousarray(channel_last.transpose(2, 0, 1))
         return torch.from_numpy(channel_first).unsqueeze(0).to(torch.float32)
 
-    def predict(self, sample: TrainingSample) -> SpatialProbabilityEstimate:
+    def preprocessing_summary(self) -> Dict[str, Dict[str, object]]:
+        """Return fitted preprocessing parameters needed for shift diagnostics."""
+        if self._preprocessing is None:
+            raise RuntimeError("The spatial ensemble must be fitted before inspection.")
+        return {
+            name: {
+                "median": float(self._preprocessing.medians[index]),
+                "mean": float(self._preprocessing.means[index]),
+                "scale": float(self._preprocessing.scales[index]),
+                "training_missing_indicator": (
+                    index in self._preprocessing.indicator_indices
+                ),
+            }
+            for index, name in enumerate(self._preprocessing.feature_names)
+        }
+
+    def predict(
+        self, sample: TrainingSample | SpatialFeatureInput
+    ) -> SpatialProbabilityEstimate:
         """Return ensemble mean probability and per-cell ensemble disagreement."""
         if not self._members:
             raise RuntimeError("The spatial ensemble must be fitted before prediction.")
@@ -478,6 +519,7 @@ class ProbabilisticSpatialEnsemble:
             "target_data_status": "model_estimate",
             "model": "ProbabilisticSpatialEnsemble",
             "model_version": MODEL_VERSION,
+            "preprocessing_version": self.artifact_preprocessing_version,
             "modis_id": sample.modis_id,
             "observation_datetime": sample.metadata.get(
                 "observation_datetime"
@@ -508,6 +550,7 @@ class ProbabilisticSpatialEnsemble:
             "artifact_type": "spatial_ml_probabilistic_spatial_ensemble",
             "format_version": ARTIFACT_FORMAT_VERSION,
             "model_version": MODEL_VERSION,
+            "preprocessing_version": self.artifact_preprocessing_version,
             "configuration": {
                 "grid_height": self.grid_height,
                 "grid_width": self.grid_width,
@@ -559,11 +602,20 @@ class ProbabilisticSpatialEnsemble:
             raise ValueError("Unsupported spatial model artifact format.")
         if payload.get("model_version") != MODEL_VERSION:
             raise ValueError("Unsupported spatial model version.")
+        preprocessing_version = payload.get(
+            "preprocessing_version", "legacy_unspecified"
+        )
+        if preprocessing_version not in {
+            PREPROCESSING_VERSION,
+            "legacy_unspecified",
+        }:
+            raise ValueError("Unsupported spatial preprocessing version.")
 
         configuration = payload["configuration"]
         if not isinstance(configuration, dict):
             raise ValueError("Spatial model artifact configuration is invalid.")
         model = cls(**configuration)
+        model.artifact_preprocessing_version = preprocessing_version
         model.feature_names = tuple(str(name) for name in payload["feature_names"])
         model.input_channel_names = tuple(
             str(name) for name in payload["input_channel_names"]
