@@ -16,7 +16,7 @@ const PAPER = '#EEF1EB'
 const MAGENTA = '#B4136B'
 const INK = '#17231D'
 
-export function createMap(element, legendElement, { onAreaChange }) {
+export function createMap(element, legendElement, { onAreaChange, onRegimeClick }) {
   const L = window.L
   const half = CONFIG.cellSize / 2
 
@@ -59,22 +59,23 @@ export function createMap(element, legendElement, { onAreaChange }) {
   const imageryLabels = L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
     pane: 'imageryLabels', maxNativeZoom: 18,
   })
-  const vectorBase = L.layerGroup()
-  let basemap = 'map'
+  // "Map": Esri's dark grey canvas, so fire colours stand out
+  const darkBase = L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imagery', maxNativeZoom: 16, attribution: 'Map © Esri, HERE, Garmin, OpenStreetMap contributors',
+  })
+  const darkLabels = L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    pane: 'imageryLabels', maxNativeZoom: 16,
+  })
+  const vectorBase = L.layerGroup()   // Natural Earth outlines; only used if the tiles can't load
+  let basemap = 'satellite'
 
   function setBasemap(name) {
     basemap = name
     const satellite = name === 'satellite'
     element.classList.toggle('is-satellite', satellite)
-    if (satellite) {
-      map.removeLayer(vectorBase); map.removeLayer(placeLayer)
-      imagery.addTo(map); imageryLabels.addTo(map)
-    } else {
-      map.removeLayer(imagery); map.removeLayer(imageryLabels)
-      vectorBase.addTo(map); placeLayer.addTo(map)
-    }
-    shade.setStyle(satellite ? { fillColor: '#000', fillOpacity: 0.45 } : { fillColor: PAPER, fillOpacity: 0.62 })
-    if (cellValues) setCells(cellValues, cellMetric, cellPeriod)
+    element.classList.toggle('is-dark', !satellite)
+    for (const l of [imagery, imageryLabels, darkBase, darkLabels]) map.removeLayer(l)
+    if (satellite) { imagery.addTo(map); imageryLabels.addTo(map) } else { darkBase.addTo(map); darkLabels.addTo(map) }
     if (regimeLayer) regimeLayer.setStyle(regimeStyle)
   }
 
@@ -102,7 +103,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
   }
 
   // town names: show more of them as you zoom in
-  const placeLayer = L.layerGroup().addTo(map)
+  const placeLayer = L.layerGroup()   // not shown: the map tiles carry place names. Kept for search.
   function drawPlaces() {
     placeLayer.clearLayers()
     const zoom = map.getZoom()
@@ -188,17 +189,50 @@ export function createMap(element, legendElement, { onAreaChange }) {
   }
 
   // values: { count, frp } with one number per cell. period: text for the tooltip.
+  // Hotspots are drawn as a soft glow (Leaflet.heat) instead of hard squares.
+  // The squares stay, invisible, so hovering still shows each cell's numbers.
+  const heat = L.heatLayer([], {
+    minOpacity: 0.25, maxZoom: 1, max: 1,   // maxZoom below minZoom: intensity never rescales with zoom
+    gradient: { 0.15: FIRE_RAMP[0], 0.35: FIRE_RAMP[1], 0.55: FIRE_RAMP[2], 0.72: FIRE_RAMP[3], 0.88: FIRE_RAMP[4], 1: FIRE_RAMP[5] },
+  })
+  const heatPane = map.createPane('heat'); heatPane.style.zIndex = 250; heatPane.style.pointerEvents = 'none'
+  function sizeHeat() {
+    // radius follows the size of one grid cell on screen
+    if (!map.hasLayer(heat)) return
+    const a = map.latLngToContainerPoint([0, 0]), b = map.latLngToContainerPoint([0, CONFIG.cellSize])
+    const px = Math.max(6, Math.abs(b.x - a.x))
+    heat.setOptions({ radius: px * 0.62, blur: px * 0.42 })
+  }
+  map.on('zoomend', sizeHeat)
+  // Leaflet.heat always puts its canvas in the overlay pane; move it under the area box and back
+  let heatPoints = []
+  function addHeat() {
+    if (map.hasLayer(heat)) return
+    heat.addTo(map); heatPane.appendChild(heat._canvas); sizeHeat()
+    heat.setLatLngs(heatPoints)
+  }
+  function removeHeat() {
+    if (!map.hasLayer(heat)) return
+    if (heat._frame) { L.Util.cancelAnimFrame(heat._frame); heat._frame = null }
+    map.getPanes().overlayPane.appendChild(heat._canvas)
+    map.removeLayer(heat)
+  }
+
   function setCells(values, metric, period) {
     cellValues = values; cellMetric = metric; cellPeriod = period
     const v = values[metric]
     const breaks = fireBreaks(v)
-    cellSquares.forEach((square, i) => {
-      const color = fireColor(v[i], breaks)
-      const sat = basemap === 'satellite'
-      square.setStyle(color
-        ? { fillColor: color, fillOpacity: sat ? 0.5 : 0.95, opacity: sat ? 0 : 1 }
-        : { fillOpacity: 0, opacity: 0 })
+    const points = []
+    v.forEach((value, i) => {
+      if (!value) return
+      let step = 0
+      while (step < breaks.length - 1 && value >= breaks[step + 1]) step++
+      const c = data.cells[i]
+      points.push([c.lat, c.lon, (step + 1) / breaks.length])
     })
+    cellSquares.forEach(square => square.setStyle({ fillOpacity: 0, opacity: 0 }))
+    heatPoints = points
+    if (showing === 'hotspots') { addHeat(); sizeHeat(); heat.setLatLngs(points) }
     hotspotLegend = { breaks, metric, period }
     drawLegend()
   }
@@ -215,6 +249,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
       if (!seen.has(p.regime_id)) seen.set(p.regime_id, { name: p.regime_name, color: p.color || '#999' })
     }
     regimeLayer = L.geoJSON(geojson, { renderer: cellCanvas, style: regimeStyle })
+    regimeLayer.on('click', e => { if (onRegimeClick) onRegimeClick(e.layer.feature.properties, e.latlng) })
     regimeLayer.bindTooltip(layer => {
       const p = layer.feature.properties
       let html = `<b>${p.regime_name}</b>`
@@ -228,19 +263,20 @@ export function createMap(element, legendElement, { onAreaChange }) {
 
   function regimeStyle(f) {
     const p = f.properties
-    if (basemap === 'satellite') {
-      return { fillColor: p.color || '#999', fillOpacity: 0.55, color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0 }
+    return {
+      fillColor: p.color || '#999', fillOpacity: basemap === 'satellite' ? 0.55 : 0.7,
+      color: '#fff', opacity: p.shifted ? 0.9 : 0, weight: p.shifted ? 1.2 : 0,
     }
-    return { fillColor: p.color || '#999', fillOpacity: 0.9, color: p.shifted ? INK : LAND, weight: p.shifted ? 1.6 : 1 }
   }
 
   function showLayer(name) {
     showing = name
     if (name === 'regimes' && regimeLayer) {
-      map.removeLayer(cellGroup); regimeLayer.addTo(map)
+      map.removeLayer(cellGroup); removeHeat(); regimeLayer.addTo(map)
     } else {
       if (regimeLayer) map.removeLayer(regimeLayer)
       cellGroup.addTo(map)
+      addHeat()
     }
     drawLegend()
   }
@@ -249,7 +285,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
     if (showing === 'regimes' && regimeLayer) {
       legendElement.innerHTML = '<p class="legend-title">Fire regime of each cell</p>' +
         regimeList.map(r => `<p class="legend-row"><i style="background:${r.color}"></i>${r.name}</p>`).join('') +
-        `<p class="legend-row"><i class="shifted"></i>${basemap === 'satellite' ? 'White' : 'Dark'} outline: regime changed over time</p>`
+        '<p class="legend-row"><i class="shifted"></i>White outline: regime changed over time</p>'
       return
     }
     if (!hotspotLegend) return
@@ -269,7 +305,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
   let area = null
   const WORLD_RING = [[-89, -400], [-89, 400], [89, 400], [89, -400]]
   const shade = L.polygon([WORLD_RING], {
-    renderer: areaCanvas, interactive: false, stroke: false, fillColor: PAPER, fillOpacity: 0.62,
+    renderer: areaCanvas, interactive: false, stroke: false, fillColor: '#000', fillOpacity: 0.4,
   }).addTo(map)
   const box = L.rectangle([[0, 0], [1, 1]], {
     renderer: areaCanvas, interactive: false, fill: false, color: MAGENTA, weight: 2,
@@ -340,6 +376,7 @@ export function createMap(element, legendElement, { onAreaChange }) {
       const next = tidyArea([drawStart.lat, drawStart.lng, e.latlng.lat, e.latlng.lng])
       const bigEnough = next[2] - next[0] >= 0.2 && next[3] - next[1] >= 0.2
       const before = area
+      swallowClick = true
       cancel()
       if (bigEnough) { drawArea(next); onAreaChange(next) } else { drawArea(before); onAreaChange(before) }
     }
@@ -350,9 +387,43 @@ export function createMap(element, legendElement, { onAreaChange }) {
     return cancel
   }
 
-  // Click anywhere on the map: move the box there, keeping its size
+  const inside = ll => area && ll.lat >= area[0] && ll.lat <= area[2] && ll.lng >= area[1] && ll.lng <= area[3]
+  let swallowClick = false
+
+  // Drag the box from its middle to move it
+  let moving = null
+  element.addEventListener('mousedown', ev => {
+    if (ev.shiftKey || drawing || ev.button !== 0 || ev.target.closest('.leaflet-marker-icon, .leaflet-control, button')) return
+    const ll = map.mouseEventToLatLng(ev)
+    if (!inside(ll)) return
+    ev.stopPropagation()   // keep Leaflet from panning the map
+    moving = { start: ll, from: area, moved: false }
+    element.classList.add('is-moving')
+  }, true)
+  document.addEventListener('mousemove', ev => {
+    if (!moving) return
+    const ll = map.mouseEventToLatLng(ev)
+    const dLat = ll.lat - moving.start.lat, dLon = ll.lng - moving.start.lng
+    if (Math.abs(dLat) + Math.abs(dLon) > 0.05) moving.moved = true
+    const [s, w, n, e] = moving.from
+    const shiftLat = Math.min(89 - n, Math.max(-89 - s, dLat)), shiftLon = Math.min(180 - e, Math.max(-180 - w, dLon))
+    drawArea(tidyArea([s + shiftLat, w + shiftLon, n + shiftLat, e + shiftLon]))
+  })
+  document.addEventListener('mouseup', () => {
+    if (!moving) return
+    element.classList.remove('is-moving')
+    if (moving.moved) { swallowClick = true; onAreaChange(area) }
+    moving = null
+  })
+  element.addEventListener('mousemove', ev => {
+    if (moving || drawing) return
+    element.classList.toggle('over-box', !!inside(map.mouseEventToLatLng(ev)))
+  })
+
+  // Click outside the box: move the box there, keeping its size
   map.on('click', e => {
-    if (drawing || !area) return
+    if (swallowClick) { swallowClick = false; return }
+    if (drawing || !area || inside(e.latlng)) return
     const [s, w, n, e2] = area
     const halfLat = (n - s) / 2, halfLon = (e2 - w) / 2
     const lat = Math.min(89 - halfLat, Math.max(-89 + halfLat, e.latlng.lat))
@@ -377,6 +448,9 @@ export function createMap(element, legendElement, { onAreaChange }) {
 
   return {
     map, loadBasemap, buildCells, setCells, setRegimes, showLayer, setBasemap,
+    getPlaces: () => places,
+    openPopup: (html, latlng) => L.popup({ className: 'story-popup', maxWidth: 320, autoPanPadding: [20, 20] }).setLatLng(latlng).setContent(html).openOn(map),
+    isShowing: () => showing,
     setArea, fitArea, startDrawing,
     isDrawing: () => drawing,
     hasRegimes: () => !!regimeLayer,

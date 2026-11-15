@@ -24,12 +24,13 @@ const state = {
   metric: 'count',                 // 'count' (hotspots) or 'frp' (fire energy)
   mode: 'amount',                  // calendar colours: 'amount' or 'score'
   layer: 'hotspots',               // map layer: 'hotspots' or 'regimes'
+  mapYear: null,                   // one year shown on the map (time slider), or null for the selected years
 }
 
 let mapView = null
 let table = null        // the calendar numbers for the current area and years
 let regimes = null      // { geojson, summary } once loaded
-let cancelDrawing = null
+let playingAt = null    // { year, month } while the map is playing through the record
 
 // ---------------------------------------------------------------------------
 // State <-> page address
@@ -109,7 +110,7 @@ function render() {
 
   // --- controls show the current state ---
   $('areaError').hidden = true
-  $('presetSelect').value = areaName()
+  document.querySelectorAll('#presetChips button').forEach(b => b.setAttribute('aria-pressed', String(b.textContent === areaName())))
   $('south').value = state.area[0]; $('west').value = state.area[1]
   $('north').value = state.area[2]; $('east').value = state.area[3]
   $('fromYear').value = state.fromYear; $('toYear').value = state.toYear
@@ -123,7 +124,7 @@ function render() {
   const lastKey = `${state.toYear}-12`
   const last = picked ? first : (monthIndex(lastKey) >= 0 ? monthIndex(lastKey) : data.months.length - 1)
   const period = picked ? `${MONTHS[picked.month]} ${picked.year}` : `${state.fromYear} to ${state.toYear}`
-  mapView.setCells(cellTotals(first, last), state.metric, period)
+  drawMapPeriod(picked)
   mapView.showLayer(state.layer)
 
   // --- verdict ---
@@ -160,15 +161,48 @@ function render() {
   $('downloadButton').disabled = $('copyCsvButton').disabled = !csv.rows
 }
 
+// what the map shows: the month being played, a picked month, one slider year, or the selected years
+function drawMapPeriod(picked) {
+  const range = (a, b) => {
+    const i = monthIndex(a), j = monthIndex(b)
+    return [i >= 0 ? i : 0, j >= 0 ? j : data.months.length - 1]
+  }
+  let first, last, period
+  if (playingAt) {
+    first = last = monthIndex(monthKey(playingAt.year, playingAt.month)); period = `${MONTHS[playingAt.month]} ${playingAt.year}`
+  } else if (picked) {
+    first = last = monthIndex(state.month); period = `${MONTHS[picked.month]} ${picked.year}`
+  } else if (state.mapYear) {
+    [first, last] = range(`${state.mapYear}-01`, `${state.mapYear}-12`); period = String(state.mapYear)
+  } else {
+    [first, last] = range(`${state.fromYear}-01`, `${state.toYear}-12`); period = `${state.fromYear} to ${state.toYear}`
+  }
+  if (first < 0) first = 0
+  if (last < first) last = first
+  mapView.setCells(cellTotals(first, last), state.metric, period)
+  $('mapYearText').textContent = playingAt || picked || state.mapYear ? period : 'All years'
+  const year = playingAt ? playingAt.year : picked ? picked.year : state.mapYear
+  $('mapYear').value = year ? year - data.firstYear + 1 : 0
+}
+
+// data confidence badge: real observations or model estimates
+function confidenceBadge() {
+  const est = table.years.filter((_, i) => table.yearEstimated[i] >= 0.5)
+  if (est.length) {
+    return `<span class="badge is-estimated" title="Before 2012 only the older MODIS sensor existed, so those years are converted by our model.">Partly estimated: ${est[0]} to ${est[est.length - 1]}</span>`
+  }
+  return `<span class="badge is-observed" title="Every number here comes straight from NASA satellite fire detections (${CONFIG.observedLabel || 'VIIRS'}).">Real satellite observations</span>`
+}
+
 function renderVerdict(picked, totals, cellsInside) {
   const el = $('verdict')
-  const where = `<p class="verdict-where"><b>${areaName()}</b><span>${areaText()}</span></p>`
+  const where = `<p class="verdict-where"><b>${areaName()}</b><span>${areaText()}</span>${cellsInside ? confidenceBadge() : ''}</p>`
 
   if (cellsInside === 0) {
     el.className = 'verdict level-none'
     el.innerHTML = where +
       '<h1 class="verdict-sentence">There is no data for this area yet.</h1>' +
-      '<p class="verdict-help">Move the area inside the dashed outline on the map, or pick one from the Area menu.</p>'
+      '<p class="verdict-help">No satellite detected a fire here, or the box is over the sea. Drag the box onto land, or search for a place.</p>'
     return
   }
 
@@ -181,8 +215,8 @@ function renderVerdict(picked, totals, cellsInside) {
       `<h1 class="verdict-sentence">${v.sentence}</h1>` +
       '<div class="verdict-side">' +
         `<p class="level"><i class="level-icon" aria-hidden="true"></i>${LEVEL_TEXT[v.level]}</p>` +
-        `<p class="score"><span class="score-number">${v.level === 'none' ? 'n/a' : formatScore(v.score)}</span><span class="score-label">Anomaly score</span></p>` +
-        scoreMeter(v.level === 'none' ? null : v.score) +
+        `<p class="score"><span class="score-number">${v.level === 'none' ? 'n/a' : formatScore(v.score)}</span><span class="score-label">How unusual</span></p>` +
+        scoreMeter(v.level === 'none' ? null : v.score) + '<p class="score-help">0 is normal · 2 or more is rare</p>' +
         '<button type="button" class="link" id="clearMonth">Back to all years</button>' +
       '</div>' +
       '<dl class="facts">' +
@@ -204,7 +238,7 @@ function renderVerdict(picked, totals, cellsInside) {
     side = '<div class="verdict-side">' +
       '<p class="level">Most unusual month</p>' +
       `<p class="score"><span class="score-number">${formatScore(o.top.score)}</span><span class="score-label">${MONTHS[o.top.month]} ${o.top.year}</span></p>` +
-      scoreMeter(o.top.score) +
+      scoreMeter(o.top.score) + '<p class="score-help">0 is normal · 2 or more is rare</p>' +
       `<button type="button" class="link" id="seeTop">See ${MONTHS[o.top.month]} ${o.top.year}</button>` +
       '</div>'
   }
@@ -266,7 +300,7 @@ function renderRegimes() {
     html += '<li>' +
       `<i class="regime-swatch" style="background:${color}"></i>` +
       `<div class="regime-text"><h3>${p.regime_name}</h3>${s && s.summary ? `<p>${s.summary}</p>` : ''}</div>` +
-      `<div class="regime-side"><b>${Math.round(n / total * 100)}%</b><span>of cells</span>${s && s.monthly_curve ? monthShape(s.monthly_curve, '#56665E') : ''}</div>` +
+      `<div class="regime-side"><b>${Math.round(n / total * 100)}%</b><span>of cells</span>${s && s.monthly_curve ? monthShape(s.monthly_curve, '#B9C4BC') : ''}</div>` +
       '</li>'
   }
   html += '</ul>'
@@ -275,11 +309,23 @@ function renderRegimes() {
   if (shifted) note += `${shifted} of ${total} cells here changed regime over the years. `
   const check = regimes.summary && regimes.summary.validation && regimes.summary.validation.kmeans
   if (check && check.silhouette !== undefined) {
-    note += `Grouping quality (silhouette): ${check.silhouette.toFixed(2)} on a scale from −1 to 1; higher means cleaner groups.`
+    note += 'Regimes blend into each other at their edges, so treat the borders between them as approximate. '
   }
-  html += `<div class="panel-foot"><button type="button" class="button" id="regimeToggle">${state.layer === 'regimes' ? 'Show hotspots on the map' : 'Show regimes on the map'}</button>${note ? `<p>${note}</p>` : ''}</div>`
+  note += 'Click any coloured square on the regime map for its story.'
+  html += `<div class="panel-foot"><button type="button" class="button" id="regimeToggle">${state.layer === 'regimes' ? 'Show hotspots on the map' : 'Show regimes on the map'}</button>` +
+    `<a class="button" href="${CONFIG.files.regimes}" download="fire_regimes.geojson">Download regime map (GeoJSON)</a>${note ? `<p>${note}</p>` : ''}</div>`
   body.innerHTML = html
   $('regimeToggle').onclick = () => update({ layer: state.layer === 'regimes' ? 'hotspots' : 'regimes' })
+}
+
+function regimeStory(p) {
+  const s = regimes && regimes.summary && (regimes.summary.regimes || []).find(r => r.regime_id === p.regime_id)
+  let html = `<div class="story"><p class="story-name"><i style="background:${p.color}"></i>${p.regime_name}</p>`
+  if (s && s.summary) html += `<p>${s.summary}</p>`
+  if (s && s.monthly_curve) html += `<div class="story-curve">${monthShape(s.monthly_curve, p.color)}</div>`
+  if (p.hotspots_per_year !== undefined) html += `<p class="dim">This square: about ${formatNumber(p.hotspots_per_year)} hotspots a year${p.peak_month ? `, peak in ${MONTHS[p.peak_month - 1]}` : ''}.</p>`
+  if (p.shifted) html += `<p class="story-shift">Changed over time: was "${p.shift_from}", now "${p.shift_to}".</p>`
+  return html + '</div>'
 }
 
 // ---------------------------------------------------------------------------
@@ -339,16 +385,95 @@ function currentCsv() {
   return { ...rowsAsCsv(state.area, first, last), name }
 }
 
+function stopListening() {
+  stopCalendar()
+  markPlaying($('calendar'), null)
+  playingAt = null
+  $('listenButton').setAttribute('aria-pressed', 'false')
+  $('listenText').textContent = 'Listen'
+  $('mapPlay').setAttribute('aria-pressed', 'false')
+  drawMapPeriod(focus())
+}
+
+function startPlaying() {
+  $('listenButton').setAttribute('aria-pressed', 'true')
+  $('mapPlay').setAttribute('aria-pressed', 'true')
+  $('listenText').textContent = 'Stop'
+  playCalendar(table, (row, month) => {
+    markPlaying($('calendar'), row, month)
+    if (row === null || row === undefined) return
+    playingAt = { year: table.years[row], month: Number.isInteger(month) ? month : 0 }
+    $('listenText').textContent = `Stop (${table.years[row]})`
+    drawMapPeriod(focus())
+  }, stopListening)
+}
+
 function wireControls() {
-  // area menu
-  const select = $('presetSelect')
-  select.innerHTML = CONFIG.presets.map(p => `<option>${p.name}</option>`).join('') +
-    '<option>Whole data region</option><option disabled>Custom area</option>'
-  select.onchange = () => {
-    const preset = CONFIG.presets.find(p => p.name === select.value)
-    const box = preset ? preset.box : data.bounds
-    update({ area: [...box] })
+  // example areas as chips
+  const chips = $('presetChips')
+  chips.innerHTML = [...CONFIG.presets.map(p => p.name), 'Whole world']
+    .map(n => `<button type="button" class="chip" aria-pressed="false">${n}</button>`).join('')
+  chips.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      const preset = CONFIG.presets.find(p => p.name === b.textContent)
+      update({ area: [...(preset ? preset.box : data.bounds)] })
+      mapView.fitArea()
+    }
+  })
+
+  // place search: the place names the map already has, no outside service
+  const search = $('placeSearch'), results = $('placeResults')
+  let hits = []
+  const closeResults = () => { results.hidden = true; search.setAttribute('aria-expanded', 'false') }
+  const goTo = place => {
+    const [s0, w0, n0, e0] = state.area
+    const hLat = Math.min(4, (n0 - s0) / 2), hLon = Math.min(6, (e0 - w0) / 2)
+    update({ area: [place.lat - hLat, place.lon - hLon, place.lat + hLat, place.lon + hLon].map(v => Math.round(v * 10) / 10) })
     mapView.fitArea()
+    search.value = place.name
+    closeResults()
+  }
+  search.oninput = () => {
+    const q = search.value.trim().toLowerCase()
+    if (q.length < 2) { closeResults(); return }
+    const seen = new Set()
+    hits = mapView.getPlaces()
+      .filter(p => p.name && p.name.toLowerCase().includes(q) && !seen.has(p.name) && seen.add(p.name))
+      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.rank - b.rank)
+      .slice(0, 8)
+    results.innerHTML = hits.length
+      ? hits.map((p, i) => `<li role="option" data-i="${i}">${p.name}<span>${degrees(Math.round(p.lat * 10) / 10, 'N', 'S')}, ${degrees(Math.round(p.lon * 10) / 10, 'E', 'W')}</span></li>`).join('')
+      : '<li class="none">No place with that name. Try a nearby city.</li>'
+    results.hidden = false
+    search.setAttribute('aria-expanded', 'true')
+  }
+  search.onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); if (hits[0]) goTo(hits[0]) }
+    if (e.key === 'Escape') closeResults()
+  }
+  results.onmousedown = e => {
+    const li = e.target.closest('li[data-i]')
+    if (li) { e.preventDefault(); goTo(hits[Number(li.dataset.i)]) }
+  }
+  search.onblur = () => setTimeout(closeResults, 150)
+
+  // map key behind an info button
+  $('legendToggle').onclick = () => {
+    const legend = $('mapLegend')
+    legend.hidden = !legend.hidden
+    $('legendToggle').setAttribute('aria-expanded', String(!legend.hidden))
+  }
+
+  // time slider on the map: 0 = the selected years, then one step per year
+  const slider = $('mapYear')
+  slider.max = data.lastYear - data.firstYear + 1
+  slider.oninput = () => {
+    const v = Number(slider.value)
+    update({ mapYear: v ? data.firstYear + v - 1 : null, month: null })
+  }
+  $('mapPlay').onclick = () => {
+    if (isPlaying()) { stopListening(); return }
+    startPlaying()
   }
 
   // typed coordinates
@@ -366,17 +491,6 @@ function wireControls() {
     if (problem) return
     update({ area: [s, w, n, e] })
     mapView.fitArea()
-  }
-
-  // draw on map
-  $('drawButton').onclick = () => {
-    if (mapView.isDrawing()) { cancelDrawing(); return }
-    $('drawButton').textContent = 'Cancel drawing'
-    $('drawHint').hidden = false
-    cancelDrawing = mapView.startDrawing(() => {
-      $('drawButton').textContent = 'Draw on map'
-      $('drawHint').hidden = true
-    })
   }
 
   // years
@@ -403,21 +517,10 @@ function wireControls() {
     }
   })
 
-  // listen
-  const stopListening = () => {
-    stopCalendar()
-    markPlaying($('calendar'), null)
-    $('listenButton').setAttribute('aria-pressed', 'false')
-    $('listenText').textContent = 'Listen'
-  }
+  // listen (the calendar button and the map's play button share one player; the map follows the sound)
   $('listenButton').onclick = () => {
     if (isPlaying()) { stopListening(); return }
-    $('listenButton').setAttribute('aria-pressed', 'true')
-    $('listenText').textContent = 'Stop'
-    playCalendar(table, (row, month) => {
-      markPlaying($('calendar'), row, month)
-      if (row !== null) $('listenText').textContent = `Stop (${table.years[row]})`
-    }, stopListening)
+    startPlaying()
   }
 
   // share
@@ -461,6 +564,7 @@ async function start() {
 
   mapView = createMap($('map'), $('mapLegend'), {
     onAreaChange: area => update({ area }),
+    onRegimeClick: (props, latlng) => mapView.openPopup(regimeStory(props), latlng),
   })
   mapView.loadBasemap()   // not awaited: the map fills in while the data loads
   mapView.setBasemap('satellite')
