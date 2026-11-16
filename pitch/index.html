@@ -210,6 +210,49 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
 .bottom2>div{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .b2h{font:700 17px 'JetBrains Mono';letter-spacing:.14em;text-transform:uppercase;color:var(--sat);margin-right:6px}
 .bottom2 i.f{background:color-mix(in srgb,var(--ember) 10%,#fff);border:1px dashed color-mix(in srgb,var(--ember) 45%,transparent)}
+.app{margin-top:6px;border-radius:22px;overflow:hidden;border:1.5px solid #2a2f2e;background:#121514;box-shadow:0 40px 90px -30px #1c1a1777;color:#E9ECEA;height:735px;display:flex;flex-direction:column}
+.app-bar{height:48px;background:#1a1e1d;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid #262b2a}
+.app-bar i{width:12px;height:12px;border-radius:50%;background:#3a403e}
+.app-url{margin-left:14px;font:500 16px 'JetBrains Mono';color:#9aa3a0;background:#121514;padding:6px 16px;border-radius:9px;flex:1}
+.app-live{font:700 14px 'JetBrains Mono';color:#F2A03D}
+.app-body{flex:1;display:grid;grid-template-columns:230px 1fr;min-height:0}
+.app-side{background:#151918;border-right:1px solid #232827;padding:18px 14px;display:flex;flex-direction:column;gap:4px}
+.app-logo{display:flex;align-items:center;gap:10px;font:800 24px 'Inter';margin:0 0 14px 6px}
+.lg4{display:grid;grid-template-columns:repeat(2,13px);gap:2px}.lg4 b{width:13px;height:13px;display:block}
+.lg4 b:nth-child(1){background:#F2C14E}.lg4 b:nth-child(2){background:#E2550F}.lg4 b:nth-child(3){background:#C8321E}.lg4 b:nth-child(4){background:#7A1F12}
+.nav{font:500 18px 'Inter';padding:10px 12px;border-radius:11px;color:#cfd5d3;transition:all .35s}
+.nav.on{background:#E9ECEA;color:#121514;font-weight:700}
+.nav-h{font:700 12px 'JetBrains Mono';letter-spacing:.16em;text-transform:uppercase;color:#6f7875;margin:14px 0 4px 12px}
+.app-main{padding:18px 20px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.verdict{background:linear-gradient(90deg,#2a1a12,#1b1f1e);border:1px solid #3a2a20;border-radius:16px;padding:16px 22px;transition:all .35s}
+.vplace{font:800 24px 'Inter'} .vplace span{font:500 15px 'JetBrains Mono';color:#9aa3a0;margin-left:10px}
+.vline{font-size:19px;color:#cfd5d3;margin-top:6px} .vline b{color:#fff} .vline em{font-style:normal;color:#F2A03D;font-weight:800}
+.vstats{display:flex;gap:40px;margin-top:10px}
+.vstats div{display:flex;flex-direction:column} .vstats b{font:800 30px 'Inter';color:#F2A03D} .vstats div>span{font-size:14px;color:#9aa3a0}
+.cards4{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;min-height:0}
+.ac{background:#1b1f1e;border:1px solid #262b2a;border-radius:16px;padding:14px 18px;display:flex;flex-direction:column;gap:8px;transition:all .35s;overflow:hidden}
+.ah{font:700 15px 'JetBrains Mono';letter-spacing:.04em;color:#F2A03D;margin-bottom:2px}
+.ac.on,.verdict.on,.accstrip.on{border-color:#F2A03D;box-shadow:0 0 0 2px #F2A03D55,0 0 40px #E2550F33}
+.tb{display:flex;flex-direction:column;gap:8px}
+.tbr{display:grid;grid-template-columns:40px 1fr 150px;gap:10px;align-items:center;font-size:15px;color:#9aa3a0}
+.tbr b{font:700 15px 'JetBrains Mono';color:#fff;text-align:right} .tbr small{color:#7d8784;font-weight:400}
+.tt{position:relative;height:16px;background:#232827;border-radius:6px;overflow:hidden}
+.tt i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.tt i.y{background:linear-gradient(90deg,#E2550F,#F2A03D)} .tt i.u{background:#8FB0B6;z-index:1;min-width:3px}
+.alg{font-size:13px;color:#9aa3a0;display:flex;gap:8px;align-items:center} .alg i{display:inline-block;width:12px;height:12px;border-radius:3px} .alg i.y{background:#F2A03D} .alg i.u{background:#8FB0B6;margin-left:10px}
+.al{display:grid;grid-template-columns:78px 1fr;column-gap:12px;align-items:center}
+.al b{font-size:17px} .al small{grid-column:2;font-size:14px;color:#9aa3a0}
+.sg{grid-row:span 2;font:800 16px 'JetBrains Mono';text-align:center;padding:7px 0;border-radius:9px;color:#fff}
+.sg.s5{background:#C8321E}.sg.s4{background:#E2550F}.sg.s3{background:#B7791F}
+.note{font-size:13px;color:#7d8784;margin-top:auto}
+.pr{display:flex;flex-direction:column;gap:4px}
+.prt{display:flex;justify-content:space-between;font-size:15px} .prt span{font:800 16px 'JetBrains Mono';color:#F2A03D}
+.prb{height:12px;background:#232827;border-radius:6px;overflow:hidden} .prb i{display:block;height:100%;width:0;transition:width 1.3s cubic-bezier(.2,.8,.2,1)}
+.pr small{font-size:13px;color:#9aa3a0}
+.fcx{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px}
+.fcx div{background:#151918;border:1px solid #262b2a;border-radius:14px;padding:12px 16px;display:flex;flex-direction:column}
+.fcx b{font:800 46px 'Inter';color:#F2A03D;line-height:1} .fcx span{font-size:15px;color:#cfd5d3;margin-top:4px} .fcx small{font:600 14px 'JetBrains Mono';color:#9aa3a0;margin-top:4px}
+.accstrip{background:#1b1f1e;border:1px solid #262b2a;border-radius:14px;padding:11px 18px;font-size:16px;color:#cfd5d3;text-align:center;transition:all .35s}
 /* ---------- s4 demo ---------- */
 .demo{display:flex;flex-direction:column;height:100%}
 .vhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:34px}
@@ -438,11 +481,65 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
   </div>
 </section>
 
-<!-- ================= 5 · LIVE DEMO ================= -->
-<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~60s. Teammate demo: press T (or click Teammate's screen) before you start talking. On the teammate's laptop open the deck link with ?send at the end, click Share my screen and pick the Ember window. Their screen appears here. Backups: S to share this laptop's screen or a call window, L to load the live app, or drop a recording. Path: search “Northern Alberta” → Fire Map → Anomalies → Patterns → Listen → Trends.">
-  <div class="demo">
-    <div class="vhead"><div><div class="kicker r" style="--d:.05">Live demo</div><h2 class="r" style="--d:.15">How does <em>Ember</em> work?</h2></div><small class="r" style="--d:.3">Better if we show you →</small></div>
-    <div class="screen r" style="--d:.35">
+<!-- ================= 5 · EMBER IN ACTION ================= -->
+<section class="slide tone-sat" id="s5" data-tone="sat" data-notes="~50s. “Better if we show you. This is Ember on Northern Alberta, real output from the live app. Since 2006 it's seen 188,766 hotspots here. A usual year has about 3,000, and 2023 had 23 times that. Trends shows 2023 against a usual year, month by month. Anomalies ranks the most unusual months: September 2023 had 17,051 hotspots when a usual September has 79. Patterns says what kind of fire this is: nearly all of it is occasional, high-intensity wildfire peaking in July and August. And Forecast predicts the next 7 and 30 days with a likely range, tested on 2023, a year the model never saw. Plus you can listen to it, speak to it, or ask the chatbot.”">
+  <div class="vhead"><div><div class="kicker r" style="--d:.05">Ember in action</div><h2 class="r" style="--d:.15;font-size:66px;white-space:nowrap">Better if we <em>show you</em>.</h2></div><small class="r" style="--d:.3">Real output · Northern Alberta</small></div>
+  <div class="app r" style="--d:.35">
+    <div class="app-bar"><i></i><i></i><i></i><div class="app-url">nasa-space-apps-2026-syntax-terror.github.io/Ember</div><span class="app-live">● LIVE DATA</span></div>
+    <div class="app-body">
+      <div class="app-side">
+        <div class="app-logo"><span class="lg4"><b></b><b></b><b></b><b></b></span>Ember</div>
+        <div class="nav" data-k="map">🗺 Map</div>
+        <div class="nav-h">Explore</div>
+        <div class="nav" data-k="trends">📈 Trends</div>
+        <div class="nav" data-k="anom">⚑ Anomalies</div>
+        <div class="nav" data-k="pat">▦ Patterns</div>
+        <div class="nav" data-k="fc">🔮 Forecast</div>
+        <div class="nav-h">Accessible</div>
+        <div class="nav" data-k="acc">🔊 Listen</div>
+        <div class="nav" data-k="acc">🎙 Speak</div>
+        <div class="nav" data-k="acc">💬 Ask Ember</div>
+      </div>
+      <div class="app-main">
+        <div class="verdict" data-k="map">
+          <div class="vplace">Northern Alberta <span>55–59.5°N · 110–119°W</span></div>
+          <div class="vline">Fire here usually peaks in <b>July</b>. The biggest year since 2006 was <b>2023</b>, with <em>23×</em> the hotspots of a usual year.</div>
+          <div class="vstats"><div><b><span data-count="188766" data-comma="1">0</span></b><span>hotspots since 2006</span></div><div><b><span data-count="2966" data-comma="1">0</span></b><span>in a usual year</span></div><div><b>+4.5σ</b><span>most unusual month · Sep 2023</span></div></div>
+        </div>
+        <div class="cards4">
+          <div class="ac" data-k="trends"><div class="ah">📈 Trends · 2023 vs a usual year</div>
+            <div class="tb">
+              <div class="tbr"><span>May</span><div class="tt"><i class="u" data-w="1.0"></i><i class="y" data-w="92"></i></div><b>15,758 <small>vs 167</small></b></div>
+              <div class="tbr"><span>Jul</span><div class="tt"><i class="u" data-w="3.2"></i><i class="y" data-w="93"></i></div><b>15,931 <small>vs 541</small></b></div>
+              <div class="tbr"><span>Aug</span><div class="tt"><i class="u" data-w="1.3"></i><i class="y" data-w="64"></i></div><b>10,989 <small>vs 221</small></b></div>
+              <div class="tbr"><span>Sep</span><div class="tt"><i class="u" data-w=".5"></i><i class="y" data-w="100"></i></div><b>17,051 <small>vs 79</small></b></div>
+            </div>
+            <div class="alg"><i class="y"></i>2023 <i class="u"></i>usual month</div>
+          </div>
+          <div class="ac" data-k="anom"><div class="ah">⚑ Anomalies · most unusual months</div>
+            <div class="al"><span class="sg s5">+4.5σ</span><b>September 2023</b><small>17,051 vs a usual 79</small></div>
+            <div class="al"><span class="sg s4">+4.3σ</span><b>August 2023</b><small>10,989 vs a usual 221</small></div>
+            <div class="al"><span class="sg s4">+4.1σ</span><b>March 2010</b><small>122 vs a usual 11</small></div>
+            <div class="note">0 is normal · 2 or more is rare</div>
+          </div>
+          <div class="ac" data-k="pat"><div class="ah">▦ Patterns · how this area burns</div>
+            <div class="pr"><div class="prt"><b>Steady occasional high-intensity wildfires</b><span>49%</span></div><div class="prb"><i data-w="49" style="background:#D55E00"></i></div><small>~13 hotspots a cell a year · peak August</small></div>
+            <div class="pr"><div class="prt"><b>Boom-bust high-intensity wildfires</b><span>42%</span></div><div class="prb"><i data-w="42" style="background:#E69F00"></i></div><small>~20 hotspots a cell a year · peak July</small></div>
+            <div class="pr"><div class="prt"><b>Other: low-intensity, crop-style burning</b><span>9%</span></div><div class="prb"><i data-w="9" style="background:#56B4E9"></i></div></div>
+          </div>
+          <div class="ac" data-k="fc"><div class="ah">🔮 Forecast · next 7 and 30 days</div>
+            <div class="fcx">
+              <div><b>10</b><span>hotspots, next 7 days</span><small>likely 0 – 84</small></div>
+              <div><b>95</b><span>hotspots, next 30 days</span><small>likely 2 – 217</small></div>
+            </div>
+            <div class="note">Tested on 2023, a year the model never saw · inputs: recent fire, NASA POWER weather &amp; soil moisture, season</div>
+          </div>
+        </div>
+        <div class="accstrip" data-k="acc">🔊 Listen to the season · 🎙 Voice commands &amp; read-aloud · 💬 Ask Ember (AI chatbot) · 🎨 Colour-blind palette</div>
+      </div>
+    </div>
+  </div>
+  <div id="legacyDemo" style="display:none"><div class="screen r" style="--d:.35">
       <div class="bar"><i></i><i></i><i></i><div class="url" id="urlBar">ember</div><div class="live-tag">LIVE</div></div>
       <div class="view" id="view">
         <label class="drop" id="drop">
@@ -456,6 +553,7 @@ h2 em,h1 em{font-style:italic;color:var(--tone)}
       </div>
     </div>
   </div>
+</div>
 </section>
 
 <!-- ================= 6 · WHAT MAKES IT DIFFERENT ================= -->
@@ -571,7 +669,7 @@ const CONFIG = {
     el.textContent = (0).toFixed(dec);
     later(() => { const t0 = performance.now();
       const step = now => { const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,4);
-        el.textContent = (to*e).toFixed(dec); if (p<1) requestAnimationFrame(step); };
+        el.textContent = el.dataset.comma ? Math.round(to*e).toLocaleString('en-US') : (to*e).toFixed(dec); if (p<1) requestAnimationFrame(step); };
       requestAnimationFrame(step); }, delay);
   }
   const timers = [];
@@ -583,10 +681,11 @@ const CONFIG = {
       const host = el.closest('.r'); const d = host ? parseFloat(host.style.getPropertyValue('--d')||0)*1000 : 0;
       countUp(el, d + 350);
     });
-    s.querySelectorAll('.meter i,.hb .t i,.cmp-t i').forEach(i => { i.style.width = 0; later(() => i.style.width = i.dataset.w + '%', 900); });
+    s.querySelectorAll('.meter i,.hb .t i,.cmp-t i,.tt i,.prb i').forEach(i => { i.style.width = 0; later(() => i.style.width = i.dataset.w + '%', 900); });
     if (s.id === 's2') runTrend();
     if (s.id === 's3') runChat();
     if (s.id === 's4') runPipe();
+    if (s.id === 's5') runTour();
     if (s.id === 's6') runBA();
   }
   function leave(s){ if (s.id === 's6') stopSound(); }
@@ -659,6 +758,15 @@ const CONFIG = {
     steps.forEach((s,i) => later(() => { s.classList.add('on'); fill.style.width = (i/(steps.length-1))*100 + '%'; }, 900 + i*650));
   }
 
+  /* ---- s5 interface tour: highlight each part in turn ---- */
+  function runTour(){
+    const order=['map','trends','anom','pat','fc','acc'];
+    const sec=document.getElementById('s5');
+    const set=k=>{ sec.querySelectorAll('[data-k]').forEach(e=>e.classList.toggle('on', e.dataset.k===k)); };
+    set(null);
+    order.forEach((k,i)=> later(()=>set(k), 1600 + i*2600));
+    later(()=>set(null), 1600 + order.length*2600);
+  }
   /* ---- s5 demo ---- */
   const view = document.getElementById('view'), drop = document.getElementById('drop'), file = document.getElementById('file');
   let scrStream = null;
